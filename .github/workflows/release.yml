@@ -38,8 +38,27 @@ jobs:
             echo "An open release/* PR into main already exists — skipping." >&2
           fi
 
-      - name: Bump VERSION and create release branch
+      # Without this guard, the post-release "sync main back into develop"
+      # PR (see post-release.yml) pushes a commit to develop that itself
+      # triggers this workflow again — with nothing but the VERSION bump
+      # as a "change", producing an infinite chain of no-op releases. Only
+      # cut a release when develop actually differs from main beyond the
+      # VERSION file itself.
+      - name: Check for changes not yet in main
+        id: diff
         if: steps.check.outputs.count == '0'
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if git diff --quiet origin/main HEAD -- . ':!VERSION'; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "develop has no changes beyond main (besides VERSION) — skipping release." >&2
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Bump VERSION and create release branch
+        if: steps.check.outputs.count == '0' && steps.diff.outputs.has_changes == 'true'
         id: bump
         run: |
           set -euo pipefail
@@ -62,7 +81,7 @@ jobs:
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
 
       - name: Open release PR into main
-        if: steps.check.outputs.count == '0'
+        if: steps.check.outputs.count == '0' && steps.diff.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_AUTOMATION_TOKEN }}
         run: |
