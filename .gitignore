@@ -26,3 +26,4 @@ docker-compose.override.yml
 # Claude Code local session state (not part of the app)
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/agents/

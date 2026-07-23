@@ -18,14 +18,34 @@ Checklist de fases usado pelo orquestrador (sessão principal do Claude Code) en
 - [x] `main.py` do backend atualizado para servir `frontend/dist` como estático (guard para dev sem build)
 - [~] `qa`/`devops`: **Docker não está instalado neste ambiente local** — não foi possível rodar `docker compose up` de verdade. Validação equivalente feita: `pytest` (36/36, mesmo comando do CI), `ruff check` limpo, `npm run build`/`lint` limpos, smoke test via FastAPI `TestClient` (`/api/health` e serving do `index.html` do build real do frontend), YAMLs parseados com sucesso. A build Docker real só será exercitada de fato no primeiro `ci.yml`/`deploy.yml` rodando nos runners do GitHub (que já têm Docker nativo).
 
-## Checkpoint intermediário (não bloqueia Fase 4, é só uma decisão do usuário)
-- [ ] Perguntar ao usuário se quer instalar Docker localmente pra validar o build antes do primeiro push, ou confiar no primeiro CI run pra pegar qualquer problema de Docker
+## Checkpoint intermediário — resolvido
+- [x] Usuário optou por confiar no CI (não instalar Docker localmente) — build real validado com sucesso no primeiro `deploy.yml`
 
-## Fase 4 — Checkpoints com o usuário (nunca autônomos)
-- [ ] Criar/usar repositório no GitHub (`https://github.com/lmatospereira/financial-ledger.git`) + orientar cadastro dos Secrets (`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`)
-- [ ] Confirmar caminho local do arquivo `ssh-key-2026-04-19.key`
-- [ ] Setup do VPS Oracle (Docker, porta liberada, `authorized_keys`) — `opc@163.176.209.227`
-- [ ] Primeiro push em `main` → primeiro deploy real + smoke test + verificação manual no IP público
+## Fase 4 — Checkpoints com o usuário — todos concluídos
+- [x] Repositório GitHub `lmatospereira/financial-ledger` já existia (criado com LICENSE GPLv3 + README + .gitignore padrão) — mergeado com `--allow-unrelated-histories -X ours` (mantendo nosso `.gitignore` mais específico)
+- [x] Chave local confirmada: `/home/lucas/Downloads/ssh-key-2026-04-19.key`
+- [x] Setup do VPS Oracle concluído via SSH: Docker CE + compose plugin instalados (Oracle Linux 9.7, aarch64/Ampere), porta 80/tcp liberada no firewalld, chave de deploy dedicada (`livro-caixa-deploy-key`, gerada só pra CI, não a chave pessoal do usuário) adicionada ao `authorized_keys`, diretório `~/financial-ledger` com `docker-compose.yml` e `.env` de produção criado
+- [x] `deploy.yml` corrigido para build multi-arch (`linux/arm64` via QEMU) já que o VPS é ARM, não x86 — runners do GitHub Actions são amd64 por padrão
+- [x] `gh` CLI já estava instalado/autenticado (`lmatospereira`, escopo `repo`+`workflow`) — usado pra configurar credencial do `git push` e pra cadastrar os 3 Secrets (`VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`) via `gh secret set`
+- [x] Primeiro push em `main` → CI verde (41s) → Deploy verde (build ARM ~4min + deploy + smoke test) → app confirmado no ar em `http://163.176.209.227/api/health`
+- Nota: primeiro run do Deploy falhou porque os Secrets foram cadastrados alguns segundos depois do workflow já ter sido disparado (snapshot de secrets ficou vazio) — resolvido com `gh run rerun --failed`, que já pegou os secrets corretos.
+- Login de produção: usuário `test`, senha gerada aleatoriamente e mostrada uma única vez ao usuário na conversa (não fica salva em nenhum arquivo do repo).
+
+## Projeto concluído (v1 — single-env)
+App no ar em `http://163.176.209.227`. CI/CD funcionando: todo push em `main` que passar no `ci.yml` builda e reimplanta automaticamente.
+
+## Fase 5 — GitFlow multi-ambiente (dev/hml/prod no mesmo VPS)
+Pedido do usuário: `feature-*` → PR pra `develop` → deploy automático em **dev**; merge em `develop` gera automaticamente uma branch/PR de `release/*` → **hml**; só a release mergeada em `main` vai pra **prod**. Decisões confirmadas: portas diferentes (sem domínio ainda), release automática a cada merge em `develop`, sync de volta + tag após merge em `main`, proteção de branch com CI obrigatório.
+
+- [x] Branch `develop` criada a partir da `main` e pushada
+- [x] VPS: diretórios `~/financial-ledger-dev` (porta 8080, imagem `:dev`) e `~/financial-ledger-hml` (porta 8081, imagem `:hml`) criados, com `docker-compose.yml` e `.env` próprios (credenciais: `dev`/`hml` como usuário, senhas fortes geradas — ver histórico da conversa)
+- [x] Firewall do SO liberado nas portas 8080 e 8081 (ainda **falta confirmar** se a Security List/NSG da Oracle Cloud libera essas portas — só confirmamos a 80 até agora)
+- [x] Ruleset do GitHub criado (`require-ci-green`, id 19624179): exige checks `backend-tests` e `frontend-build` verdes antes de merge em `main` e `develop`. `release/*` ficou de fora de propósito (branches criadas pelo bot, não queremos bloquear o push inicial).
+- [x] `devops`: `VERSION` file, `release.yml` (auto-cria `release/vX.Y.Z` a partir da `develop` e abre PR pra `main`, com guarda contra releases duplicadas), `post-release.yml` (tag `vX.Y.Z` + PR de sync `main`→`develop` com auto-merge), `deploy.yml` reescrito pra rotear pra dev/hml/prod conforme a branch
+- [x] **Bug real encontrado e corrigido**: pushes/PRs feitos com o `GITHUB_TOKEN` padrão não disparam novos workflow runs (proteção anti-recursão do GitHub) — isso quebraria o CI em `release/*` (sem deploy pra hml) e travaria o auto-merge do sync `main→develop` (CI nunca rodaria na PR, e a proteção de branch da `develop` exige CI verde). Corrigido reusando o token do `gh` CLI já autenticado como secret `GH_AUTOMATION_TOKEN`, usado no checkout/push/`gh` desses dois workflows em vez do `GITHUB_TOKEN` padrão.
+- [x] Configurações do repo ajustadas via API: `allow_auto_merge=true` (necessário pro `gh pr merge --auto`), `default_workflow_permissions=write` + `can_approve_pull_request_reviews=true`
+- [x] Testando o fluxo ponta a ponta via branch `feature-gitflow-cicd` → PR pra `develop` (dogfooding do próprio fluxo que acabamos de criar)
+- [ ] Confirmar liberação das portas 8080/8081 no console da Oracle Cloud (Security List/NSG) — teste de conectividade sugeriu que ainda **não** estão liberadas (timeout, diferente da 80 que respondeu rápido). Usuário optou por seguir sem isso por enquanto; dev/hml só vão responder de fora depois que isso for feito no console.
 
 ## Notas
 - Contrato de API (fonte da verdade compartilhada entre backend-dev e frontend-dev) está descrito em `.claude/agents/backend-dev.md` e `.claude/agents/frontend-dev.md`.
