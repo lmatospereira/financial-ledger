@@ -1,0 +1,81 @@
+name: Post Release
+
+# Fires on every closed PR; the job itself only runs when a release/* branch
+# was actually merged into main (see the job-level `if`).
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  tag-and-sync:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.base.ref == 'main' &&
+      startsWith(github.event.pull_request.head.ref, 'release/')
+    steps:
+      # Real PAT, not the default GITHUB_TOKEN: the tag push and PR below
+      # need to trigger normal Actions events (branch protection on
+      # `develop` requires CI to actually run on the sync PR before
+      # auto-merge can fire), which GITHUB_TOKEN-driven pushes don't do.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+          token: ${{ secrets.GH_AUTOMATION_TOKEN }}
+
+      - name: Read released version
+        id: version
+        run: echo "version=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Tag the release
+        env:
+          GH_TOKEN: ${{ secrets.GH_AUTOMATION_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="v${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$tag" "${{ github.event.pull_request.merge_commit_sha }}"
+          git push origin "$tag"
+
+      - name: Open PR to sync main back into develop
+        env:
+          GH_TOKEN: ${{ secrets.GH_AUTOMATION_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="${{ steps.version.outputs.version }}"
+
+          # Make sure origin/develop is available locally to diff against —
+          # actions/checkout above only guarantees history for the ref we
+          # checked out (the merge commit).
+          git fetch origin develop:refs/remotes/origin/develop
+
+          if [ -z "$(git log origin/develop..origin/main --oneline)" ]; then
+            echo "develop is already up to date with main; nothing to sync."
+            exit 0
+          fi
+
+          existing=$(gh pr list --repo "${{ github.repository }}" --base develop --head main --state open \
+            --json number --jq 'length')
+          if [ "$existing" -gt 0 ]; then
+            echo "A main -> develop sync PR is already open; skipping."
+            exit 0
+          fi
+
+          pr_url=$(gh pr create \
+            --repo "${{ github.repository }}" \
+            --base develop \
+            --head main \
+            --title "Sync main back into develop after v${version}" \
+            --body "Auto-generated after release v${version} was merged into \`main\`. Syncs the release/version-bump commits back into \`develop\`.")
+
+          # Best-effort: enable auto-merge so it lands once its own required
+          # checks pass. If branch protection / conflicts prevent it, leave
+          # the PR open for a human rather than forcing anything.
+          gh pr merge --auto --merge "$pr_url" \
+            || echo "Could not enable auto-merge — leaving PR open for manual merge: $pr_url"
