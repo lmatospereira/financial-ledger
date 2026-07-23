@@ -20,6 +20,10 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Needed by the GHA cache exporter below (cache-to: type=gha) — without
+      # it, cache writes fail with "token has no writable scopes" and can
+      # take the whole build down with them.
+      actions: write
     outputs:
       image: ${{ steps.image.outputs.image }}
       skip: ${{ steps.envmap.outputs.skip }}
@@ -97,8 +101,12 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: ${{ steps.envmap.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Scoped per environment — dev/hml/prod can build concurrently
+          # (e.g. right after a release merge triggers a develop sync-back),
+          # and a shared cache scope causes them to collide on the same
+          # cache key and fail the whole build.
+          cache-from: type=gha,scope=${{ steps.envmap.outputs.name }}
+          cache-to: type=gha,mode=max,scope=${{ steps.envmap.outputs.name }}
 
       - id: image
         if: steps.envmap.outputs.skip != 'true'
