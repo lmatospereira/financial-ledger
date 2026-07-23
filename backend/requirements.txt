@@ -1,0 +1,11 @@
+fastapi==0.139.2
+uvicorn[standard]==0.51.0
+sqlalchemy==2.0.51
+pydantic==2.13.4
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+# passlib 1.7.4 is incompatible with bcrypt>=4.1 (removed the __about__
+# module passlib probes for the version). Pin bcrypt to a compatible 4.x.
+bcrypt==4.0.1
+pytest==9.1.1
+httpx==0.28.1

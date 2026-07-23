@@ -1,0 +1,28 @@
+# Backend (Python)
+backend/.env
+backend/venv/
+backend/*.db
+backend/data/*.db
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Frontend (Node) — kept here so it's covered even before frontend/ exists
+node_modules/
+frontend/dist/
+frontend/build/
+frontend/.env
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Docker / deployment (root-level, docker-dev's work)
+.env
+data/
+docker-compose.override.yml
+
+# Claude Code local session state (not part of the app)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
