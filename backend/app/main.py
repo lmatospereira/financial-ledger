@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import auth, crud
@@ -95,13 +95,27 @@ def health():
 
 
 # ---------------------------------------------------------------------------
-# Serve the built frontend as static files for single-container deployment
-# (no Nginx/domain/HTTPS yet). Mounted last so it never shadows /api routes,
-# which are matched first. Path is relative to backend/'s working directory
-# (the Docker image and local dev both keep frontend/ as a sibling of
-# backend/), and is skipped if the frontend hasn't been built yet so plain
+# Serve the built frontend for single-container deployment (no Nginx/domain/
+# HTTPS yet). Registered last so it never shadows /api routes, which are
+# matched first. Path is relative to backend/'s working directory (the
+# Docker image and local dev both keep frontend/ as a sibling of backend/),
+# and is skipped if the frontend hasn't been built yet so plain
 # `uvicorn app.main:app` still works during backend-only development.
+#
+# This is a manual catch-all instead of `StaticFiles(html=True)` mounted at
+# "/": that only auto-serves index.html for the root and real directories,
+# so a direct/refreshed request for a client-side route like /login or
+# /accounts (no matching file on disk) 404s instead of handing off to the
+# React app. Here, hashed build assets are served normally via StaticFiles,
+# and everything else falls back to index.html so react-router can take over.
 # ---------------------------------------------------------------------------
 _frontend_dist = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 if _frontend_dist.is_dir():
-    app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="frontend")
+    app.mount("/assets", StaticFiles(directory=str(_frontend_dist / "assets")), name="frontend-assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def serve_frontend(full_path: str):
+        candidate = _frontend_dist / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(_frontend_dist / "index.html")
