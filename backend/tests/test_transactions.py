@@ -21,42 +21,58 @@ def expense_category(client, auth_headers):
     return response.json()
 
 
-def make_transaction(client, auth_headers, category_id, **overrides):
+def make_transaction(client, auth_headers, category_id, account_id=None, **overrides):
     payload = {
         "date": "2026-03-15",
         "description": "Test transaction",
         "amount": 100.0,
         "type": "income",
         "category_id": category_id,
+        "account_id": account_id,
     }
     payload.update(overrides)
     return client.post("/api/transactions", json=payload, headers=auth_headers)
 
 
-def test_create_transaction(client, auth_headers, income_category):
-    response = make_transaction(client, auth_headers, income_category["id"])
+def test_create_transaction(client, auth_headers, income_category, default_account):
+    response = make_transaction(client, auth_headers, income_category["id"], default_account["id"])
     assert response.status_code == 201
     body = response.json()
     assert body["amount"] == 100.0
     assert body["category_id"] == income_category["id"]
+    assert body["account_id"] == default_account["id"]
     assert "created_at" in body
 
 
-def test_create_transaction_unknown_category(client, auth_headers):
-    response = make_transaction(client, auth_headers, 999)
+def test_create_transaction_unknown_category(client, auth_headers, default_account):
+    response = make_transaction(client, auth_headers, 999, default_account["id"])
     assert response.status_code == 404
 
 
-def test_create_transaction_without_category(client, auth_headers):
-    response = make_transaction(client, auth_headers, None)
+def test_create_transaction_unknown_account(client, auth_headers, income_category):
+    response = make_transaction(client, auth_headers, income_category["id"], 999)
+    assert response.status_code == 404
+
+
+def test_create_transaction_without_category(client, auth_headers, default_account):
+    response = make_transaction(client, auth_headers, None, default_account["id"])
     assert response.status_code == 201
     body = response.json()
     assert body["category_id"] is None
     assert body["category"] is None
 
 
-def test_update_transaction_remove_category(client, auth_headers, income_category):
-    created = make_transaction(client, auth_headers, income_category["id"]).json()
+def test_create_transaction_type_transfer_rejected(client, auth_headers, default_account):
+    response = make_transaction(
+        client, auth_headers, None, default_account["id"], type="transfer"
+    )
+    assert response.status_code == 422
+
+
+def test_update_transaction_remove_category(client, auth_headers, income_category, default_account):
+    created = make_transaction(
+        client, auth_headers, income_category["id"], default_account["id"]
+    ).json()
     response = client.put(
         f"/api/transactions/{created['id']}",
         json={
@@ -65,6 +81,7 @@ def test_update_transaction_remove_category(client, auth_headers, income_categor
             "amount": 50.0,
             "type": "expense",
             "category_id": None,
+            "account_id": default_account["id"],
         },
         headers=auth_headers,
     )
@@ -74,14 +91,16 @@ def test_update_transaction_remove_category(client, auth_headers, income_categor
     assert body["category"] is None
 
 
-def test_create_transaction_negative_amount_rejected(client, auth_headers, income_category):
-    response = make_transaction(client, auth_headers, income_category["id"], amount=-5)
+def test_create_transaction_negative_amount_rejected(client, auth_headers, income_category, default_account):
+    response = make_transaction(
+        client, auth_headers, income_category["id"], default_account["id"], amount=-5
+    )
     assert response.status_code == 422
 
 
-def test_list_transactions_filtered_by_month(client, auth_headers, income_category):
-    make_transaction(client, auth_headers, income_category["id"], date="2026-03-15")
-    make_transaction(client, auth_headers, income_category["id"], date="2026-04-01")
+def test_list_transactions_filtered_by_month(client, auth_headers, income_category, default_account):
+    make_transaction(client, auth_headers, income_category["id"], default_account["id"], date="2026-03-15")
+    make_transaction(client, auth_headers, income_category["id"], default_account["id"], date="2026-04-01")
 
     response = client.get("/api/transactions?month=3&year=2026", headers=auth_headers)
     assert response.status_code == 200
@@ -90,18 +109,20 @@ def test_list_transactions_filtered_by_month(client, auth_headers, income_catego
     assert results[0]["date"] == "2026-03-15"
 
 
-def test_list_transactions_sorted_by_date(client, auth_headers, income_category):
-    make_transaction(client, auth_headers, income_category["id"], date="2026-03-20")
-    make_transaction(client, auth_headers, income_category["id"], date="2026-03-05")
-    make_transaction(client, auth_headers, income_category["id"], date="2026-03-10")
+def test_list_transactions_sorted_by_date(client, auth_headers, income_category, default_account):
+    make_transaction(client, auth_headers, income_category["id"], default_account["id"], date="2026-03-20")
+    make_transaction(client, auth_headers, income_category["id"], default_account["id"], date="2026-03-05")
+    make_transaction(client, auth_headers, income_category["id"], default_account["id"], date="2026-03-10")
 
     response = client.get("/api/transactions?month=3&year=2026", headers=auth_headers)
     dates = [t["date"] for t in response.json()]
     assert dates == sorted(dates)
 
 
-def test_update_transaction(client, auth_headers, income_category, expense_category):
-    created = make_transaction(client, auth_headers, income_category["id"]).json()
+def test_update_transaction(client, auth_headers, income_category, expense_category, default_account):
+    created = make_transaction(
+        client, auth_headers, income_category["id"], default_account["id"]
+    ).json()
     response = client.put(
         f"/api/transactions/{created['id']}",
         json={
@@ -110,6 +131,7 @@ def test_update_transaction(client, auth_headers, income_category, expense_categ
             "amount": 50.0,
             "type": "expense",
             "category_id": expense_category["id"],
+            "account_id": default_account["id"],
         },
         headers=auth_headers,
     )
@@ -120,7 +142,7 @@ def test_update_transaction(client, auth_headers, income_category, expense_categ
     assert body["type"] == "expense"
 
 
-def test_update_transaction_not_found(client, auth_headers, income_category):
+def test_update_transaction_not_found(client, auth_headers, income_category, default_account):
     response = client.put(
         "/api/transactions/999",
         json={
@@ -129,14 +151,17 @@ def test_update_transaction_not_found(client, auth_headers, income_category):
             "amount": 50.0,
             "type": "income",
             "category_id": income_category["id"],
+            "account_id": default_account["id"],
         },
         headers=auth_headers,
     )
     assert response.status_code == 404
 
 
-def test_delete_transaction(client, auth_headers, income_category):
-    created = make_transaction(client, auth_headers, income_category["id"]).json()
+def test_delete_transaction(client, auth_headers, income_category, default_account):
+    created = make_transaction(
+        client, auth_headers, income_category["id"], default_account["id"]
+    ).json()
     response = client.delete(f"/api/transactions/{created['id']}", headers=auth_headers)
     assert response.status_code == 204
 
@@ -154,8 +179,8 @@ def test_transactions_require_auth(client):
     assert response.status_code == 401
 
 
-def test_list_transactions_includes_category_object(client, auth_headers, income_category):
-    make_transaction(client, auth_headers, income_category["id"], date="2026-03-15")
+def test_list_transactions_includes_category_object(client, auth_headers, income_category, default_account):
+    make_transaction(client, auth_headers, income_category["id"], default_account["id"], date="2026-03-15")
 
     response = client.get("/api/transactions?month=3&year=2026", headers=auth_headers)
     assert response.status_code == 200
@@ -164,9 +189,24 @@ def test_list_transactions_includes_category_object(client, auth_headers, income
     assert results[0]["category"] == income_category
 
 
-def test_list_transactions_mixed_categorized_and_uncategorized(client, auth_headers, income_category):
-    make_transaction(client, auth_headers, income_category["id"], date="2026-03-05")
-    make_transaction(client, auth_headers, None, date="2026-03-10")
+def test_list_transactions_includes_account_object(client, auth_headers, income_category, default_account):
+    make_transaction(client, auth_headers, income_category["id"], default_account["id"], date="2026-03-15")
+
+    response = client.get("/api/transactions?month=3&year=2026", headers=auth_headers)
+    assert response.status_code == 200
+    results = response.json()
+    assert len(results) == 1
+    account = results[0]["account"]
+    assert account["id"] == default_account["id"]
+    assert account["name"] == default_account["name"]
+    # AccountRef is deliberately lighter than AccountOut: no balance/created_at.
+    assert "balance" not in account
+    assert "created_at" not in account
+
+
+def test_list_transactions_mixed_categorized_and_uncategorized(client, auth_headers, income_category, default_account):
+    make_transaction(client, auth_headers, income_category["id"], default_account["id"], date="2026-03-05")
+    make_transaction(client, auth_headers, None, default_account["id"], date="2026-03-10")
 
     response = client.get("/api/transactions?month=3&year=2026", headers=auth_headers)
     assert response.status_code == 200
@@ -176,6 +216,24 @@ def test_list_transactions_mixed_categorized_and_uncategorized(client, auth_head
     assert by_date["2026-03-05"]["category"] == income_category
     assert by_date["2026-03-10"]["category"] is None
     assert by_date["2026-03-10"]["category_id"] is None
+
+
+def test_list_transactions_filtered_by_account(client, auth_headers, income_category, default_account):
+    other_account = client.post(
+        "/api/accounts",
+        json={"name": "Savings", "type": "savings", "color": "#654321"},
+        headers=auth_headers,
+    ).json()
+    make_transaction(client, auth_headers, income_category["id"], default_account["id"], date="2026-03-05")
+    make_transaction(client, auth_headers, income_category["id"], other_account["id"], date="2026-03-06")
+
+    response = client.get(
+        f"/api/transactions?month=3&year=2026&account_id={default_account['id']}", headers=auth_headers
+    )
+    assert response.status_code == 200
+    results = response.json()
+    assert len(results) == 1
+    assert results[0]["account_id"] == default_account["id"]
 
 
 def test_list_transactions_missing_query_param_returns_string_detail(client, auth_headers):
@@ -198,9 +256,13 @@ def test_summary_empty_month(client, auth_headers):
     }
 
 
-def test_summary_income_only_month(client, auth_headers, income_category):
-    make_transaction(client, auth_headers, income_category["id"], date="2026-03-05", amount=200)
-    make_transaction(client, auth_headers, income_category["id"], date="2026-03-20", amount=300)
+def test_summary_income_only_month(client, auth_headers, income_category, default_account):
+    make_transaction(
+        client, auth_headers, income_category["id"], default_account["id"], date="2026-03-05", amount=200
+    )
+    make_transaction(
+        client, auth_headers, income_category["id"], default_account["id"], date="2026-03-20", amount=300
+    )
 
     response = client.get("/api/summary?month=3&year=2026", headers=auth_headers)
     body = response.json()
@@ -210,15 +272,22 @@ def test_summary_income_only_month(client, auth_headers, income_category):
     assert body["previous_balance"] == 0.0
 
 
-def test_summary_month_rollover(client, auth_headers, income_category, expense_category):
+def test_summary_month_rollover(client, auth_headers, income_category, expense_category, default_account):
     # March: income 500, expense 200 -> balance 300
     make_transaction(
-        client, auth_headers, income_category["id"], date="2026-03-05", amount=500, type="income"
+        client,
+        auth_headers,
+        income_category["id"],
+        default_account["id"],
+        date="2026-03-05",
+        amount=500,
+        type="income",
     )
     make_transaction(
         client,
         auth_headers,
         expense_category["id"],
+        default_account["id"],
         date="2026-03-10",
         amount=200,
         type="expense",
@@ -230,7 +299,13 @@ def test_summary_month_rollover(client, auth_headers, income_category, expense_c
 
     # April: income 100 only, but previous_balance should carry March's 300
     make_transaction(
-        client, auth_headers, income_category["id"], date="2026-04-05", amount=100, type="income"
+        client,
+        auth_headers,
+        income_category["id"],
+        default_account["id"],
+        date="2026-04-05",
+        amount=100,
+        type="income",
     )
 
     april_summary = client.get("/api/summary?month=4&year=2026", headers=auth_headers).json()
@@ -240,9 +315,15 @@ def test_summary_month_rollover(client, auth_headers, income_category, expense_c
     assert april_summary["previous_balance"] == 300.0
 
 
-def test_summary_year_rollover(client, auth_headers, income_category):
+def test_summary_year_rollover(client, auth_headers, income_category, default_account):
     make_transaction(
-        client, auth_headers, income_category["id"], date="2025-12-15", amount=1000, type="income"
+        client,
+        auth_headers,
+        income_category["id"],
+        default_account["id"],
+        date="2025-12-15",
+        amount=1000,
+        type="income",
     )
 
     response = client.get("/api/summary?month=1&year=2026", headers=auth_headers)
@@ -251,17 +332,35 @@ def test_summary_year_rollover(client, auth_headers, income_category):
     assert body["income_total"] == 0.0
 
 
-def test_summary_with_uncategorized_transactions(client, auth_headers, income_category, expense_category):
+def test_summary_with_uncategorized_transactions(
+    client, auth_headers, income_category, expense_category, default_account
+):
     # Mix of categorized and uncategorized transactions; category should not
     # affect the income/expense totals at all.
     make_transaction(
-        client, auth_headers, income_category["id"], date="2026-03-05", amount=200, type="income"
+        client,
+        auth_headers,
+        income_category["id"],
+        default_account["id"],
+        date="2026-03-05",
+        amount=200,
+        type="income",
     )
-    make_transaction(client, auth_headers, None, date="2026-03-06", amount=150, type="income")
     make_transaction(
-        client, auth_headers, expense_category["id"], date="2026-03-07", amount=50, type="expense"
+        client, auth_headers, None, default_account["id"], date="2026-03-06", amount=150, type="income"
     )
-    make_transaction(client, auth_headers, None, date="2026-03-08", amount=30, type="expense")
+    make_transaction(
+        client,
+        auth_headers,
+        expense_category["id"],
+        default_account["id"],
+        date="2026-03-07",
+        amount=50,
+        type="expense",
+    )
+    make_transaction(
+        client, auth_headers, None, default_account["id"], date="2026-03-08", amount=30, type="expense"
+    )
 
     response = client.get("/api/summary?month=3&year=2026", headers=auth_headers)
     assert response.status_code == 200

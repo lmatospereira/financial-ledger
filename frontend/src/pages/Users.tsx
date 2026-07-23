@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
-import LabelOutlinedIcon from '@mui/icons-material/LabelOutlined'
+import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined'
 import {
   Alert,
   Box,
   Button,
   Card,
+  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -16,54 +17,62 @@ import {
   DialogTitle,
   Divider,
   Fab,
+  FormControlLabel,
   IconButton,
   List,
   ListItem,
   ListItemText,
   Stack,
+  Switch,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
-import ColorPicker from '../components/ColorPicker'
-import { PRESET_COLORS } from '../components/colors'
 import Layout from '../components/Layout'
 import {
-  createCategory,
-  deleteCategory,
+  createUser,
+  deleteUser,
   getApiErrorMessage,
-  getCategories,
-  updateCategory,
+  getUsers,
+  updateUser,
 } from '../api/client'
-import type { Category, CategoryInput } from '../api/types'
+import { useAuth } from '../context/authContext'
+import type { CurrentUser } from '../api/types'
 
-const emptyForm: CategoryInput = {
-  name: '',
-  color: PRESET_COLORS[4],
-  type: 'expense',
+interface UserFormState {
+  username: string
+  password: string
+  is_admin: boolean
 }
 
-export default function Categories() {
-  const [categories, setCategories] = useState<Category[]>([])
+const emptyForm: UserFormState = {
+  username: '',
+  password: '',
+  is_admin: false,
+}
+
+export default function Users() {
+  const { currentUser } = useAuth()
+
+  const [users, setUsers] = useState<CurrentUser[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const [formOpen, setFormOpen] = useState(false)
-  const [editing, setEditing] = useState<Category | null>(null)
-  const [form, setForm] = useState<CategoryInput>(emptyForm)
+  const [editing, setEditing] = useState<CurrentUser | null>(null)
+  const [form, setForm] = useState<UserFormState>(emptyForm)
   const [formError, setFormError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  const [pendingDelete, setPendingDelete] = useState<Category | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<CurrentUser | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const loadCategories = async () => {
+  const loadUsers = async () => {
     setLoading(true)
     setError(null)
     try {
-      const data = await getCategories()
-      setCategories(data)
+      const data = await getUsers()
+      setUsers(data)
     } catch (err) {
       setError(getApiErrorMessage(err))
     } finally {
@@ -72,7 +81,7 @@ export default function Categories() {
   }
 
   useEffect(() => {
-    loadCategories()
+    loadUsers()
   }, [])
 
   const openCreateForm = () => {
@@ -82,29 +91,40 @@ export default function Categories() {
     setFormOpen(true)
   }
 
-  const openEditForm = (category: Category) => {
-    setEditing(category)
-    setForm({ name: category.name, color: category.color, type: category.type })
+  const openEditForm = (user: CurrentUser) => {
+    setEditing(user)
+    setForm({ username: user.username, password: '', is_admin: user.is_admin })
     setFormError(null)
     setFormOpen(true)
   }
 
   const handleSubmit = async () => {
     setFormError(null)
-    if (!form.name.trim()) {
-      setFormError('Informe um nome para a categoria.')
+    if (!form.username.trim()) {
+      setFormError('Informe um nome de usuário.')
+      return
+    }
+    if (!editing && form.password.length < 6) {
+      setFormError('A senha deve ter pelo menos 6 caracteres.')
       return
     }
 
     setSubmitting(true)
     try {
       if (editing) {
-        await updateCategory(editing.id, form)
+        await updateUser(editing.id, {
+          username: form.username.trim(),
+          is_admin: form.is_admin,
+        })
       } else {
-        await createCategory(form)
+        await createUser({
+          username: form.username.trim(),
+          password: form.password,
+          is_admin: form.is_admin,
+        })
       }
       setFormOpen(false)
-      await loadCategories()
+      await loadUsers()
     } catch (err) {
       setFormError(getApiErrorMessage(err))
     } finally {
@@ -112,15 +132,21 @@ export default function Categories() {
     }
   }
 
+  const openDeleteConfirm = (user: CurrentUser) => {
+    setDeleteError(null)
+    setPendingDelete(user)
+  }
+
   const confirmDelete = async () => {
     if (!pendingDelete) return
+    setDeleteError(null)
     setDeleting(true)
     try {
-      await deleteCategory(pendingDelete.id)
+      await deleteUser(pendingDelete.id)
       setPendingDelete(null)
-      await loadCategories()
+      await loadUsers()
     } catch (err) {
-      setError(getApiErrorMessage(err))
+      setDeleteError(getApiErrorMessage(err))
     } finally {
       setDeleting(false)
     }
@@ -130,7 +156,7 @@ export default function Categories() {
     <Layout>
       <Stack spacing={3}>
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
-          Categorias
+          Usuários
         </Typography>
 
         {error && <Alert severity="error">{error}</Alert>}
@@ -140,15 +166,15 @@ export default function Categories() {
             <Box sx={{ py: 8, display: 'flex', justifyContent: 'center' }}>
               <CircularProgress />
             </Box>
-          ) : categories.length === 0 ? (
+          ) : users.length === 0 ? (
             <Box sx={{ py: 8, textAlign: 'center', color: 'text.secondary' }}>
-              <LabelOutlinedIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
-              <Typography variant="body1">Nenhuma categoria cadastrada.</Typography>
+              <GroupOutlinedIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
+              <Typography variant="body1">Nenhum usuário cadastrado.</Typography>
             </Box>
           ) : (
             <List disablePadding>
-              {categories.map((category, index) => (
-                <Box key={category.id}>
+              {users.map((user, index) => (
+                <Box key={user.id}>
                   {index > 0 && <Divider component="li" />}
                   <ListItem
                     sx={{ py: 1.5 }}
@@ -157,33 +183,31 @@ export default function Categories() {
                         <IconButton
                           aria-label="Editar"
                           size="small"
-                          onClick={() => openEditForm(category)}
+                          onClick={() => openEditForm(user)}
                         >
                           <EditOutlinedIcon fontSize="small" />
                         </IconButton>
                         <IconButton
                           aria-label="Excluir"
                           size="small"
-                          onClick={() => setPendingDelete(category)}
+                          onClick={() => openDeleteConfirm(user)}
+                          disabled={user.id === currentUser?.id}
                         >
                           <DeleteOutlineIcon fontSize="small" />
                         </IconButton>
                       </Stack>
                     }
                   >
-                    <Box
-                      sx={{
-                        width: 16,
-                        height: 16,
-                        borderRadius: '50%',
-                        bgcolor: category.color,
-                        mr: 2,
-                        flexShrink: 0,
-                      }}
-                    />
                     <ListItemText
-                      primary={category.name}
-                      secondary={category.type === 'income' ? 'Receita' : 'Despesa'}
+                      primary={
+                        <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                          <span>{user.username}</span>
+                          {user.id === currentUser?.id && (
+                            <Chip label="Você" size="small" variant="outlined" />
+                          )}
+                        </Stack>
+                      }
+                      secondary={user.is_admin ? 'Administrador' : 'Usuário'}
                     />
                   </ListItem>
                 </Box>
@@ -195,7 +219,7 @@ export default function Categories() {
 
       <Fab
         color="primary"
-        aria-label="Adicionar categoria"
+        aria-label="Adicionar usuário"
         onClick={openCreateForm}
         sx={{ position: 'fixed', bottom: 24, right: 24 }}
       >
@@ -203,35 +227,46 @@ export default function Categories() {
       </Fab>
 
       <Dialog open={formOpen} onClose={() => setFormOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>{editing ? 'Editar categoria' : 'Nova categoria'}</DialogTitle>
+        <DialogTitle>{editing ? 'Editar usuário' : 'Novo usuário'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2.5} sx={{ mt: 1 }}>
             {formError && <Alert severity="error">{formError}</Alert>}
 
-            <ToggleButtonGroup
-              color="primary"
-              exclusive
-              fullWidth
-              value={form.type}
-              onChange={(_, value) => {
-                if (value) setForm((prev) => ({ ...prev, type: value }))
-              }}
-            >
-              <ToggleButton value="income">Receita</ToggleButton>
-              <ToggleButton value="expense">Despesa</ToggleButton>
-            </ToggleButtonGroup>
-
             <TextField
-              label="Nome"
-              value={form.name}
-              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+              label="Usuário"
+              value={form.username}
+              onChange={(e) =>
+                setForm((prev) => ({ ...prev, username: e.target.value }))
+              }
               fullWidth
               autoFocus
+              autoComplete="username"
             />
 
-            <ColorPicker
-              value={form.color}
-              onChange={(color) => setForm((prev) => ({ ...prev, color }))}
+            {!editing && (
+              <TextField
+                label="Senha"
+                type="password"
+                value={form.password}
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, password: e.target.value }))
+                }
+                fullWidth
+                autoComplete="new-password"
+              />
+            )}
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={form.is_admin}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, is_admin: e.target.checked }))
+                  }
+                  disabled={editing?.id === currentUser?.id}
+                />
+              }
+              label="Administrador"
             />
           </Stack>
         </DialogContent>
@@ -246,12 +281,16 @@ export default function Categories() {
       </Dialog>
 
       <Dialog open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)}>
-        <DialogTitle>Excluir categoria?</DialogTitle>
+        <DialogTitle>Excluir usuário?</DialogTitle>
         <DialogContent>
-          <DialogContentText>
-            Tem certeza que deseja excluir “{pendingDelete?.name}”? Essa ação não
-            pode ser desfeita.
-          </DialogContentText>
+          {deleteError ? (
+            <Alert severity="error">{deleteError}</Alert>
+          ) : (
+            <DialogContentText>
+              Tem certeza que deseja excluir “{pendingDelete?.username}”? Essa
+              ação não pode ser desfeita.
+            </DialogContentText>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setPendingDelete(null)} disabled={deleting}>

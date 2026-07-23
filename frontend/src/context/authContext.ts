@@ -1,8 +1,13 @@
 import { createContext, useContext } from 'react'
+import type { CurrentUser } from '../api/types'
 
 export interface AuthContextValue {
   isAuthenticated: boolean
-  signIn: (token: string) => void
+  // `undefined` while /api/auth/me hasn't resolved yet (token present but
+  // profile not loaded), `null` when there's no session at all.
+  currentUser: CurrentUser | null
+  authLoading: boolean
+  signIn: (token: string) => Promise<void>
   signOut: () => void
 }
 
