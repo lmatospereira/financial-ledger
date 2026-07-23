@@ -189,6 +189,21 @@ def test_list_transactions_includes_category_object(client, auth_headers, income
     assert results[0]["category"] == income_category
 
 
+def test_list_transactions_includes_account_object(client, auth_headers, income_category, default_account):
+    make_transaction(client, auth_headers, income_category["id"], default_account["id"], date="2026-03-15")
+
+    response = client.get("/api/transactions?month=3&year=2026", headers=auth_headers)
+    assert response.status_code == 200
+    results = response.json()
+    assert len(results) == 1
+    account = results[0]["account"]
+    assert account["id"] == default_account["id"]
+    assert account["name"] == default_account["name"]
+    # AccountRef is deliberately lighter than AccountOut: no balance/created_at.
+    assert "balance" not in account
+    assert "created_at" not in account
+
+
 def test_list_transactions_mixed_categorized_and_uncategorized(client, auth_headers, income_category, default_account):
     make_transaction(client, auth_headers, income_category["id"], default_account["id"], date="2026-03-05")
     make_transaction(client, auth_headers, None, default_account["id"], date="2026-03-10")

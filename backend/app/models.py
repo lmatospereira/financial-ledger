@@ -66,3 +66,9 @@ class Transaction(Base):
     )
 
     category: Mapped["Category | None"] = relationship(back_populates="transactions")
+    # No back_populates on Account: cascade-deleting a user's accounts is
+    # handled explicitly in crud.delete_user (two FKs into accounts makes
+    # ORM-level cascade="all, delete-orphan" ambiguous), so these stay
+    # simple one-directional read relationships used only for serialization.
+    account: Mapped["Account"] = relationship(foreign_keys=[account_id])
+    to_account: Mapped["Account | None"] = relationship(foreign_keys=[to_account_id])

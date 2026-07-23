@@ -48,6 +48,11 @@ export interface Account {
 
 export type AccountInput = Omit<Account, 'id' | 'created_at' | 'balance'>
 
+// Lightweight embed used for Transaction.account/to_account — the backend
+// deliberately omits `balance`/`created_at` here (they're not recomputed
+// per-transaction-row), so don't widen this to the full Account type.
+export type AccountRef = Pick<Account, 'id' | 'name' | 'type' | 'color'>
+
 export interface Category {
   id: number
   name: string
@@ -74,11 +79,11 @@ export interface Transaction {
   category_id: number | null
   category?: Category | null
   account_id: number
-  account?: Account | null
+  account?: AccountRef | null
   // Populated on `type: 'transfer'` rows returned by POST /api/transfers.
   // Nullable/omitted for income & expense rows.
   to_account_id?: number | null
-  to_account?: Account | null
+  to_account?: AccountRef | null
 }
 
 export type TransactionInput = Omit<

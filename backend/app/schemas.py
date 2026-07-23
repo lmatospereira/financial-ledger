@@ -72,6 +72,20 @@ class AccountOut(AccountBase):
     balance: float
 
 
+class AccountRef(AccountBase):
+    """Lightweight account embed for nesting inside TransactionOut.
+
+    Deliberately excludes `balance` (unlike AccountOut): computing it is an
+    aggregate query per account, and nesting the full AccountOut here would
+    mean recomputing it for every transaction row via from_attributes on the
+    raw ORM object, which doesn't even have a `.balance` attribute to read.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+
+
 # ---------- Category ----------
 class CategoryBase(BaseModel):
     name: str
@@ -124,6 +138,8 @@ class TransactionOut(BaseModel):
     to_account_id: Optional[int] = None
     created_at: datetime
     category: Optional[CategoryOut] = None
+    account: Optional[AccountRef] = None
+    to_account: Optional[AccountRef] = None
 
 
 # ---------- Transfer ----------
