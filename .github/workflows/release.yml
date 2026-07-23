@@ -1,0 +1,76 @@
+name: Release
+
+# Every push to develop tries to cut a new release/* branch + PR into main,
+# unless one is already in flight (see the "check" step below) — this keeps
+# release branches roughly one-per-batch-of-develop-changes instead of
+# stacking a new one on every single merge.
+on:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout with a real PAT (not the default GITHUB_TOKEN): pushes and
+      # PRs made with the built-in token don't trigger new workflow runs
+      # (GitHub's anti-recursion protection), which would silently stop CI
+      # from ever running on the release branch this job creates.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_AUTOMATION_TOKEN }}
+
+      - name: Check for an already-open release PR
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GH_AUTOMATION_TOKEN }}
+        run: |
+          set -euo pipefail
+          count=$(gh pr list --repo "${{ github.repository }}" --base main --state open \
+            --json headRefName --jq '[.[] | select(.headRefName | startswith("release/"))] | length')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+          if [ "$count" -gt 0 ]; then
+            echo "An open release/* PR into main already exists — skipping." >&2
+          fi
+
+      - name: Bump VERSION and create release branch
+        if: steps.check.outputs.count == '0'
+        id: bump
+        run: |
+          set -euo pipefail
+          current=$(tr -d '[:space:]' < VERSION)
+          IFS='.' read -r major minor patch <<< "$current"
+          new_patch=$((patch + 1))
+          new_version="${major}.${minor}.${new_patch}"
+          branch="release/v${new_version}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git checkout -b "$branch"
+          echo "$new_version" > VERSION
+          git add VERSION
+          git commit -m "chore(release): bump version to v${new_version}"
+          git push origin "$branch"
+
+          echo "version=$new_version" >> "$GITHUB_OUTPUT"
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Open release PR into main
+        if: steps.check.outputs.count == '0'
+        env:
+          GH_TOKEN: ${{ secrets.GH_AUTOMATION_TOKEN }}
+        run: |
+          set -euo pipefail
+          body=$(printf 'Auto-generated release PR bumping `VERSION` to `%s`.\n\nThis branch deploys to the **hml** environment on push. Please validate it there before merging into `main` (which deploys to **prod**).' "${{ steps.bump.outputs.version }}")
+          gh pr create \
+            --repo "${{ github.repository }}" \
+            --base main \
+            --head "${{ steps.bump.outputs.branch }}" \
+            --title "Release v${{ steps.bump.outputs.version }}" \
+            --body "$body"

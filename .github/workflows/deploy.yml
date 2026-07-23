@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
-    branches: [main]
+    branches: [main, develop, "release/**"]
 
 env:
   REGISTRY: ghcr.io
@@ -14,20 +14,62 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     # Only deploy once CI ("CI" workflow, from ci.yml) has actually passed
-    # for this push to main — workflow_run is what makes "after CI passes"
-    # true instead of just "in parallel with CI".
+    # for this push — workflow_run is what makes "after CI passes" true
+    # instead of just "in parallel with CI".
     if: github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: read
       packages: write
     outputs:
       image: ${{ steps.image.outputs.image }}
+      skip: ${{ steps.envmap.outputs.skip }}
+      dir: ${{ steps.envmap.outputs.dir }}
+      port: ${{ steps.envmap.outputs.port }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
+      - name: Map branch to target environment
+        id: envmap
+        run: |
+          set -euo pipefail
+          branch="${{ github.event.workflow_run.head_branch }}"
+          sha="${{ github.event.workflow_run.head_sha }}"
+          image="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+
+          if [ "$branch" = "main" ]; then
+            name=prod; port=80; tag=latest; dir=financial-ledger
+          elif [ "$branch" = "develop" ]; then
+            name=dev; port=8080; tag=dev; dir=financial-ledger-dev
+          elif [[ "$branch" == release/* ]]; then
+            name=hml; port=8081; tag=hml; dir=financial-ledger-hml
+          else
+            # Defensive: shouldn't happen given the workflow_run branches
+            # filter above, but skip cleanly rather than deploying blind.
+            echo "Unrecognized branch '$branch' — skipping deploy." >&2
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "port=$port" >> "$GITHUB_OUTPUT"
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "tags<<EOF"
+            echo "${image}:${tag}"
+            echo "${image}:${sha}"
+            if [ "$name" = "prod" ]; then
+              version=$(tr -d '[:space:]' < VERSION)
+              echo "${image}:v${version}"
+            fi
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Log in to GHCR
+        if: steps.envmap.outputs.skip != 'true'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -35,14 +77,17 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up QEMU
+        if: steps.envmap.outputs.skip != 'true'
         uses: docker/setup-qemu-action@v3
         with:
           platforms: arm64
 
       - name: Set up Docker Buildx
+        if: steps.envmap.outputs.skip != 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push image
+        if: steps.envmap.outputs.skip != 'true'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -51,18 +96,18 @@ jobs:
           # amd64, so this cross-builds via QEMU emulation set up above.
           platforms: linux/arm64
           push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.workflow_run.head_sha }}
+          tags: ${{ steps.envmap.outputs.tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - id: image
+        if: steps.envmap.outputs.skip != 'true'
         run: echo "image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
 
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+    if: needs.build-and-push.outputs.skip != 'true'
     steps:
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1
@@ -71,11 +116,17 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd ~/financial-ledger
+            cd ~/${{ needs.build-and-push.outputs.dir }}
             docker compose pull
             docker compose up -d
 
       - name: Smoke test
-        # APP_PORT is set to 80 in the VPS's .env, so the app is reachable
-        # on the bare host without a port suffix.
-        run: curl -sf "http://${{ secrets.VPS_HOST }}/api/health"
+        # prod (port 80) is reachable on the bare host without a port
+        # suffix; dev/hml are on non-standard ports and need one.
+        run: |
+          port="${{ needs.build-and-push.outputs.port }}"
+          if [ "$port" = "80" ]; then
+            curl -sf "http://${{ secrets.VPS_HOST }}/api/health"
+          else
+            curl -sf "http://${{ secrets.VPS_HOST }}:${port}/api/health"
+          fi
