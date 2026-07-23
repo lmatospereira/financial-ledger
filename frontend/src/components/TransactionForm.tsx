@@ -13,12 +13,14 @@ import {
   ToggleButton,
   ToggleButtonGroup,
 } from '@mui/material'
-import type { Category, Transaction, TransactionInput } from '../api/types'
+import type { Account, Category, Transaction, TransactionInput } from '../api/types'
 
 interface TransactionFormProps {
   open: boolean
   categories: Category[]
+  accounts: Account[]
   initialValue: Transaction | null
+  defaultAccountId?: number | null
   onClose: () => void
   onSubmit: (payload: TransactionInput) => Promise<void>
 }
@@ -27,22 +29,27 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-const emptyForm = {
-  description: '',
-  amount: '',
-  type: 'expense' as 'income' | 'expense',
-  date: todayIso(),
-  category_id: '' as number | '',
+function buildEmptyForm(defaultAccountId?: number | null) {
+  return {
+    description: '',
+    amount: '',
+    type: 'expense' as 'income' | 'expense',
+    date: todayIso(),
+    category_id: '' as number | '',
+    account_id: (defaultAccountId ?? '') as number | '',
+  }
 }
 
 export default function TransactionForm({
   open,
   categories,
+  accounts,
   initialValue,
+  defaultAccountId,
   onClose,
   onSubmit,
 }: TransactionFormProps) {
-  const [form, setForm] = useState(emptyForm)
+  const [form, setForm] = useState(() => buildEmptyForm(defaultAccountId))
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -52,15 +59,22 @@ export default function TransactionForm({
       setForm({
         description: initialValue.description,
         amount: String(initialValue.amount),
-        type: initialValue.type,
+        // Transfers are never edited through this form (see contract), but
+        // guard defensively in case a transfer row ever reaches here.
+        type: initialValue.type === 'income' ? 'income' : 'expense',
         date: initialValue.date,
         category_id: initialValue.category_id ?? '',
+        account_id: initialValue.account_id,
       })
     } else {
-      setForm(emptyForm)
+      setForm(
+        buildEmptyForm(
+          defaultAccountId ?? (accounts.length === 1 ? accounts[0].id : null),
+        ),
+      )
     }
     setError(null)
-  }, [open, initialValue])
+  }, [open, initialValue, defaultAccountId, accounts])
 
   const filteredCategories = categories.filter((c) => c.type === form.type)
 
@@ -80,6 +94,10 @@ export default function TransactionForm({
       setError('Informe a data.')
       return
     }
+    if (form.account_id === '') {
+      setError('Selecione a conta.')
+      return
+    }
 
     setSubmitting(true)
     try {
@@ -89,6 +107,7 @@ export default function TransactionForm({
         type: form.type,
         date: form.date,
         category_id: form.category_id === '' ? null : Number(form.category_id),
+        account_id: form.account_id,
       })
     } catch (err) {
       setError(
@@ -159,6 +178,25 @@ export default function TransactionForm({
               slotProps={{ inputLabel: { shrink: true } }}
             />
           </Box>
+
+          <TextField
+            select
+            label="Conta"
+            value={form.account_id}
+            onChange={(e) =>
+              setForm((prev) => ({
+                ...prev,
+                account_id: e.target.value === '' ? '' : Number(e.target.value),
+              }))
+            }
+            fullWidth
+          >
+            {accounts.map((account) => (
+              <MenuItem key={account.id} value={account.id}>
+                {account.name}
+              </MenuItem>
+            ))}
+          </TextField>
 
           <TextField
             select

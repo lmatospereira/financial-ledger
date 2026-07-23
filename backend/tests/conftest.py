@@ -54,7 +54,10 @@ def client(db_session):
 @pytest.fixture()
 def seed_admin(db_session):
     return crud.create_user(
-        db_session, username=TEST_USERNAME, password_hash=auth.hash_password(TEST_PASSWORD)
+        db_session,
+        username=TEST_USERNAME,
+        password_hash=auth.hash_password(TEST_PASSWORD),
+        is_admin=True,
     )
 
 
@@ -66,3 +69,17 @@ def auth_headers(client, seed_admin):
     assert response.status_code == 200, response.text
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture()
+def default_account(client, auth_headers):
+    """Every existing transaction test now needs an account_id; this fixture
+    gives them a ready-made one owned by the default (admin) test user.
+    """
+    response = client.post(
+        "/api/accounts",
+        json={"name": "Main Checking", "type": "checking", "color": "#123456"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 201, response.text
+    return response.json()

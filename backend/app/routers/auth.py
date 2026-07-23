@@ -1,8 +1,9 @@
-"""POST /api/auth/login"""
+"""POST /api/auth/login, GET /api/auth/me"""
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app import auth, crud, schemas
+from app import auth, crud, models, schemas
+from app.auth import get_current_user
 from app.database import get_db
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -18,3 +19,8 @@ def login(credentials: schemas.LoginRequest, db: Session = Depends(get_db)):
         )
     access_token = auth.create_access_token(data={"sub": user.username})
     return schemas.Token(access_token=access_token, token_type="bearer")
+
+
+@router.get("/me", response_model=schemas.UserOut)
+def me(current_user: models.User = Depends(get_current_user)):
+    return current_user
