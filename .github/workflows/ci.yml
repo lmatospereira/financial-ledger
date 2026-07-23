@@ -6,6 +6,15 @@ on:
   pull_request:
     branches: ["**"]
 
+# A push to a branch with an open PR fires both the push and pull_request
+# events for the same commit, running this workflow twice in parallel and
+# — since each completion independently triggers deploy.yml via workflow_run
+# — causing two concurrent deploys to the same environment that collide on
+# the shared GHA build cache. Cancel the redundant run instead.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
