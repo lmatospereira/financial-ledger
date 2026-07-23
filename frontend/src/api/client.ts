@@ -1,13 +1,22 @@
 import axios, { AxiosError } from 'axios'
 import type {
+  Account,
+  AccountInput,
   ApiError,
   Category,
+  CategoryBreakdownEntry,
   CategoryInput,
+  ChangePasswordRequest,
+  CurrentUser,
   LoginRequest,
   LoginResponse,
+  MonthlyTrendEntry,
   Summary,
   Transaction,
   TransactionInput,
+  TransferInput,
+  UserInput,
+  UserUpdateInput,
 } from './types'
 
 const TOKEN_KEY = 'livro_caixa_token'
@@ -57,12 +66,75 @@ export async function login(payload: LoginRequest): Promise<LoginResponse> {
   return data
 }
 
+export async function getCurrentUser(): Promise<CurrentUser> {
+  const { data } = await api.get<CurrentUser>('/auth/me')
+  return data
+}
+
+export async function getUsers(): Promise<CurrentUser[]> {
+  const { data } = await api.get<CurrentUser[]>('/users')
+  return data
+}
+
+export async function createUser(payload: UserInput): Promise<CurrentUser> {
+  const { data } = await api.post<CurrentUser>('/users', payload)
+  return data
+}
+
+export async function updateUser(
+  id: number,
+  payload: UserUpdateInput,
+): Promise<CurrentUser> {
+  const { data } = await api.put<CurrentUser>(`/users/${id}`, payload)
+  return data
+}
+
+export async function deleteUser(id: number): Promise<void> {
+  await api.delete(`/users/${id}`)
+}
+
+export async function changeMyPassword(
+  payload: ChangePasswordRequest,
+): Promise<void> {
+  await api.put('/users/me/password', payload)
+}
+
+export async function getAccounts(): Promise<Account[]> {
+  const { data } = await api.get<Account[]>('/accounts')
+  return data
+}
+
+export async function createAccount(payload: AccountInput): Promise<Account> {
+  const { data } = await api.post<Account>('/accounts', payload)
+  return data
+}
+
+export async function updateAccount(
+  id: number,
+  payload: AccountInput,
+): Promise<Account> {
+  const { data } = await api.put<Account>(`/accounts/${id}`, payload)
+  return data
+}
+
+export async function deleteAccount(id: number): Promise<void> {
+  await api.delete(`/accounts/${id}`)
+}
+
+export async function createTransfer(
+  payload: TransferInput,
+): Promise<Transaction> {
+  const { data } = await api.post<Transaction>('/transfers', payload)
+  return data
+}
+
 export async function getTransactions(
   month: number,
   year: number,
+  accountId?: number | null,
 ): Promise<Transaction[]> {
   const { data } = await api.get<Transaction[]>('/transactions', {
-    params: { month, year },
+    params: { month, year, account_id: accountId ?? undefined },
   })
   return data
 }
@@ -113,8 +185,26 @@ export async function deleteCategory(id: number): Promise<void> {
 export async function getSummary(
   month: number,
   year: number,
+  accountId?: number | null,
 ): Promise<Summary> {
   const { data } = await api.get<Summary>('/summary', {
+    params: { month, year, account_id: accountId ?? undefined },
+  })
+  return data
+}
+
+export async function getMonthlyTrend(year: number): Promise<MonthlyTrendEntry[]> {
+  const { data } = await api.get<MonthlyTrendEntry[]>('/reports/monthly-trend', {
+    params: { year },
+  })
+  return data
+}
+
+export async function getCategoryBreakdown(
+  month: number,
+  year: number,
+): Promise<CategoryBreakdownEntry[]> {
+  const { data } = await api.get<CategoryBreakdownEntry[]>('/reports/by-category', {
     params: { month, year },
   })
   return data

@@ -3,12 +3,31 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './context/authContext'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import Accounts from './pages/Accounts'
 import Categories from './pages/Categories'
+import Reports from './pages/Reports'
+import Users from './pages/Users'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth()
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+  return <>{children}</>
+}
+
+function RequireAdmin({ children }: { children: ReactNode }) {
+  const { isAuthenticated, currentUser, authLoading } = useAuth()
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
+  // Still resolving /api/auth/me — avoid a flash-redirect for an admin whose
+  // role hasn't loaded yet.
+  if (authLoading) {
+    return null
+  }
+  if (!currentUser?.is_admin) {
+    return <Navigate to="/" replace />
   }
   return <>{children}</>
 }
@@ -41,11 +60,35 @@ function App() {
         }
       />
       <Route
+        path="/accounts"
+        element={
+          <RequireAuth>
+            <Accounts />
+          </RequireAuth>
+        }
+      />
+      <Route
         path="/categories"
         element={
           <RequireAuth>
             <Categories />
           </RequireAuth>
+        }
+      />
+      <Route
+        path="/reports"
+        element={
+          <RequireAuth>
+            <Reports />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/users"
+        element={
+          <RequireAdmin>
+            <Users />
+          </RequireAdmin>
         }
       />
       <Route path="*" element={<Navigate to="/" replace />} />

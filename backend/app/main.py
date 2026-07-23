@@ -16,9 +16,13 @@ from fastapi.staticfiles import StaticFiles
 
 from app import auth, crud
 from app.database import Base, SessionLocal, engine
+from app.routers import accounts as accounts_router
 from app.routers import auth as auth_router
 from app.routers import categories as categories_router
+from app.routers import reports as reports_router
 from app.routers import transactions as transactions_router
+from app.routers import transfers as transfers_router
+from app.routers import users as users_router
 
 
 @asynccontextmanager
@@ -42,8 +46,12 @@ app.add_middleware(
 )
 
 app.include_router(auth_router.router)
+app.include_router(users_router.router)
+app.include_router(accounts_router.router)
 app.include_router(categories_router.router)
 app.include_router(transactions_router.router)
+app.include_router(transfers_router.router)
+app.include_router(reports_router.router)
 
 
 @app.exception_handler(RequestValidationError)
@@ -71,7 +79,12 @@ def _seed_admin_user() -> None:
             username = os.getenv("ADMIN_USERNAME")
             password = os.getenv("ADMIN_PASSWORD")
             if username and password:
-                crud.create_user(db, username=username, password_hash=auth.hash_password(password))
+                crud.create_user(
+                    db,
+                    username=username,
+                    password_hash=auth.hash_password(password),
+                    is_admin=True,
+                )
     finally:
         db.close()
 

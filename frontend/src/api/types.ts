@@ -1,7 +1,7 @@
 // Types mirroring the backend API contract (see .claude/agents/frontend-dev.md
 // and .claude/agents/backend-dev.md for the shared source of truth).
 
-export type TransactionType = 'income' | 'expense'
+export type TransactionType = 'income' | 'expense' | 'transfer'
 
 export interface LoginRequest {
   username: string
@@ -13,11 +13,49 @@ export interface LoginResponse {
   token_type: string
 }
 
+export interface CurrentUser {
+  id: number
+  username: string
+  is_admin: boolean
+}
+
+export type UserInput = {
+  username: string
+  password: string
+  is_admin: boolean
+}
+
+export type UserUpdateInput = {
+  username: string
+  is_admin: boolean
+}
+
+export interface ChangePasswordRequest {
+  current_password: string
+  new_password: string
+}
+
+export type AccountType = 'checking' | 'savings' | 'wallet' | 'credit_card' | 'other'
+
+export interface Account {
+  id: number
+  name: string
+  type: AccountType
+  color: string
+  created_at: string
+  balance: number
+}
+
+export type AccountInput = Omit<Account, 'id' | 'created_at' | 'balance'>
+
 export interface Category {
   id: number
   name: string
   color: string
-  type: TransactionType
+  // Categories are only ever income/expense — transfers are never
+  // categorized (see TransactionType, which is broader because it also
+  // covers Transaction.type).
+  type: Exclude<TransactionType, 'transfer'>
 }
 
 export type CategoryInput = Omit<Category, 'id'>
@@ -35,15 +73,48 @@ export interface Transaction {
   // silently dropping the feature here.
   category_id: number | null
   category?: Category | null
+  account_id: number
+  account?: Account | null
+  // Populated on `type: 'transfer'` rows returned by POST /api/transfers.
+  // Nullable/omitted for income & expense rows.
+  to_account_id?: number | null
+  to_account?: Account | null
 }
 
-export type TransactionInput = Omit<Transaction, 'id' | 'category'>
+export type TransactionInput = Omit<
+  Transaction,
+  'id' | 'category' | 'account' | 'to_account' | 'to_account_id' | 'type'
+> & {
+  // Transfers are never submitted through this shape — see POST /api/transfers.
+  type: Exclude<TransactionType, 'transfer'>
+}
+
+export interface TransferInput {
+  from_account_id: number
+  to_account_id: number
+  amount: number
+  date: string
+  description: string
+}
 
 export interface Summary {
   income_total: number
   expense_total: number
   balance: number
   previous_balance: number
+}
+
+export interface MonthlyTrendEntry {
+  month: number // 1-12
+  income_total: number
+  expense_total: number
+}
+
+export interface CategoryBreakdownEntry {
+  category_id: number | null
+  name: string
+  color: string
+  total: number
 }
 
 // FastAPI validation errors (422) send `detail` as an array of these objects

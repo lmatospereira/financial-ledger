@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import AddIcon from '@mui/icons-material/Add'
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import {
   Alert,
   Box,
+  Button,
   Card,
   Chip,
   CircularProgress,
   Fab,
+  MenuItem,
   Stack,
+  TextField,
   Typography,
 } from '@mui/material'
 import BalanceCard from '../components/BalanceCard'
@@ -15,16 +19,18 @@ import Layout from '../components/Layout'
 import MonthSelector from '../components/MonthSelector'
 import TransactionForm from '../components/TransactionForm'
 import TransactionList from '../components/TransactionList'
+import TransferDialog from '../components/TransferDialog'
 import {
   createTransaction,
   deleteTransaction,
+  getAccounts,
   getApiErrorMessage,
   getCategories,
   getSummary,
   getTransactions,
   updateTransaction,
 } from '../api/client'
-import type { Category, Summary, Transaction, TransactionInput } from '../api/types'
+import type { Account, Category, Summary, Transaction, TransactionInput } from '../api/types'
 
 function currentPeriod(): { month: number; year: number } {
   const now = new Date()
@@ -33,6 +39,8 @@ function currentPeriod(): { month: number; year: number } {
 
 export default function Dashboard() {
   const [{ month, year }, setPeriod] = useState(currentPeriod)
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [accountFilter, setAccountFilter] = useState<number | ''>('')
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
@@ -44,25 +52,30 @@ export default function Dashboard() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(
     null,
   )
+  const [transferOpen, setTransferOpen] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [transactionsData, categoriesData, summaryData] = await Promise.all([
-        getTransactions(month, year),
-        getCategories(),
-        getSummary(month, year),
-      ])
+      const accountId = accountFilter === '' ? undefined : accountFilter
+      const [transactionsData, categoriesData, summaryData, accountsData] =
+        await Promise.all([
+          getTransactions(month, year, accountId),
+          getCategories(),
+          getSummary(month, year, accountId),
+          getAccounts(),
+        ])
       setTransactions(transactionsData)
       setCategories(categoriesData)
       setSummary(summaryData)
+      setAccounts(accountsData)
     } catch (err) {
       setError(getApiErrorMessage(err))
     } finally {
       setLoading(false)
     }
-  }, [month, year])
+  }, [month, year, accountFilter])
 
   useEffect(() => {
     loadData()
@@ -110,6 +123,41 @@ export default function Dashboard() {
         {error && <Alert severity="error">{error}</Alert>}
 
         <BalanceCard summary={summary} loading={loading} />
+
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          spacing={2}
+          sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}
+        >
+          <TextField
+            select
+            size="small"
+            label="Conta"
+            value={accountFilter}
+            onChange={(e) =>
+              setAccountFilter(e.target.value === '' ? '' : Number(e.target.value))
+            }
+            sx={{ minWidth: 220 }}
+          >
+            <MenuItem value="">
+              <em>Todas as contas</em>
+            </MenuItem>
+            {accounts.map((account) => (
+              <MenuItem key={account.id} value={account.id}>
+                {account.name}
+              </MenuItem>
+            ))}
+          </TextField>
+
+          <Button
+            variant="outlined"
+            startIcon={<SwapHorizIcon />}
+            onClick={() => setTransferOpen(true)}
+            disabled={accounts.length < 2}
+          >
+            Nova transferência
+          </Button>
+        </Stack>
 
         {categories.length > 0 && (
           <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
@@ -166,9 +214,21 @@ export default function Dashboard() {
       <TransactionForm
         open={formOpen}
         categories={categories}
+        accounts={accounts}
         initialValue={editingTransaction}
+        defaultAccountId={accountFilter === '' ? null : accountFilter}
         onClose={() => setFormOpen(false)}
         onSubmit={handleFormSubmit}
+      />
+
+      <TransferDialog
+        open={transferOpen}
+        accounts={accounts}
+        onClose={() => setTransferOpen(false)}
+        onSuccess={async () => {
+          setTransferOpen(false)
+          await loadData()
+        }}
       />
     </Layout>
   )

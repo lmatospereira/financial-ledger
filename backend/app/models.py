@@ -1,7 +1,7 @@
-"""SQLAlchemy ORM models: User, Category, Transaction."""
+"""SQLAlchemy ORM models: User, Account, Category, Transaction."""
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Date, DateTime, Float, ForeignKey, String
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -13,12 +13,28 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     username: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
+    is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    # "checking" | "savings" | "wallet" | "credit_card" | "other"
+    type: Mapped[str] = mapped_column(String, nullable=False)
+    color: Mapped[str] = mapped_column(String, nullable=False)  # hex color, e.g. "#FF0000"
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
 
 
 class Category(Base):
     __tablename__ = "categories"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     type: Mapped[str] = mapped_column(String, nullable=False)  # "income" | "expense"
     color: Mapped[str] = mapped_column(String, nullable=False)  # hex color, e.g. "#FF0000"
@@ -35,8 +51,16 @@ class Transaction(Base):
     date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     description: Mapped[str] = mapped_column(String, nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
-    type: Mapped[str] = mapped_column(String, nullable=False)  # "income" | "expense"
+    type: Mapped[str] = mapped_column(String, nullable=False)  # "income" | "expense" | "transfer"
     category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
+    # Denormalized relative to account.user_id -- kept in sync at write time
+    # so every transaction row can be scoped to its owner in a single filter.
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False, index=True)
+    # Only set when type == "transfer": the destination account.
+    to_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("accounts.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )

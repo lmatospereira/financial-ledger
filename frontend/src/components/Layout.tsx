@@ -1,32 +1,58 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import LogoutIcon from '@mui/icons-material/Logout'
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
+import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined'
+import LogoutIcon from '@mui/icons-material/Logout'
+import PersonOutlineIcon from '@mui/icons-material/PersonOutlineOutlined'
 import {
   AppBar,
+  Avatar,
   Box,
   Button,
   Container,
+  Divider,
   IconButton,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
   Stack,
   Toolbar,
   Typography,
 } from '@mui/material'
+import ChangePasswordDialog from './ChangePasswordDialog'
 import { useAuth } from '../context/authContext'
 
 interface LayoutProps {
   children: ReactNode
 }
 
+interface NavItem {
+  label: string
+  path: string
+}
+
 export default function Layout({ children }: LayoutProps) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { signOut } = useAuth()
+  const { signOut, currentUser } = useAuth()
+
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
 
   const handleLogout = () => {
+    setMenuAnchor(null)
     signOut()
     navigate('/login', { replace: true })
   }
+
+  const navItems: NavItem[] = [
+    { label: 'Lançamentos', path: '/' },
+    { label: 'Contas', path: '/accounts' },
+    { label: 'Categorias', path: '/categories' },
+    { label: 'Relatórios', path: '/reports' },
+    ...(currentUser?.is_admin ? [{ label: 'Usuários', path: '/users' }] : []),
+  ]
 
   return (
     <Box sx={{ minHeight: '100%', bgcolor: 'background.default' }}>
@@ -36,65 +62,96 @@ export default function Layout({ children }: LayoutProps) {
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
             Livro Caixa
           </Typography>
-          <Stack direction="row" spacing={1} sx={{ display: { xs: 'none', sm: 'flex' } }}>
-            <Button
-              onClick={() => navigate('/')}
-              variant={location.pathname === '/' ? 'contained' : 'text'}
-              size="small"
-            >
-              Lançamentos
-            </Button>
-            <Button
-              onClick={() => navigate('/categories')}
-              variant={location.pathname === '/categories' ? 'contained' : 'text'}
-              size="small"
-            >
-              Categorias
-            </Button>
+          <Stack
+            direction="row"
+            spacing={1}
+            sx={{ display: { xs: 'none', md: 'flex' } }}
+          >
+            {navItems.map((item) => (
+              <Button
+                key={item.path}
+                onClick={() => navigate(item.path)}
+                variant={location.pathname === item.path ? 'contained' : 'text'}
+                size="small"
+              >
+                {item.label}
+              </Button>
+            ))}
           </Stack>
+
           <IconButton
-            aria-label="Sair"
-            onClick={handleLogout}
-            sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
-          >
-            <LogoutIcon />
-          </IconButton>
-          <Button
-            onClick={handleLogout}
-            startIcon={<LogoutIcon />}
-            color="inherit"
+            aria-label="Conta"
+            onClick={(e) => setMenuAnchor(e.currentTarget)}
             size="small"
-            sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
+            sx={{ ml: 1 }}
           >
-            Sair
-          </Button>
+            <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main', fontSize: 14 }}>
+              {currentUser?.username.slice(0, 1).toUpperCase() ?? <PersonOutlineIcon fontSize="small" />}
+            </Avatar>
+          </IconButton>
+          <Menu
+            anchorEl={menuAnchor}
+            open={Boolean(menuAnchor)}
+            onClose={() => setMenuAnchor(null)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          >
+            {currentUser && (
+              <Box sx={{ px: 2, py: 1 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {currentUser.username}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {currentUser.is_admin ? 'Administrador' : 'Usuário'}
+                </Typography>
+              </Box>
+            )}
+            <Divider />
+            <MenuItem
+              onClick={() => {
+                setMenuAnchor(null)
+                setPasswordDialogOpen(true)
+              }}
+            >
+              <ListItemIcon>
+                <KeyOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Alterar senha</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={handleLogout}>
+              <ListItemIcon>
+                <LogoutIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Sair</ListItemText>
+            </MenuItem>
+          </Menu>
         </Toolbar>
         <Stack
           direction="row"
           spacing={1}
-          sx={{ display: { xs: 'flex', sm: 'none' }, px: 2, pb: 1 }}
+          useFlexGap
+          sx={{ display: { xs: 'flex', md: 'none' }, flexWrap: 'wrap', px: 2, pb: 1 }}
         >
-          <Button
-            onClick={() => navigate('/')}
-            variant={location.pathname === '/' ? 'contained' : 'text'}
-            size="small"
-            fullWidth
-          >
-            Lançamentos
-          </Button>
-          <Button
-            onClick={() => navigate('/categories')}
-            variant={location.pathname === '/categories' ? 'contained' : 'text'}
-            size="small"
-            fullWidth
-          >
-            Categorias
-          </Button>
+          {navItems.map((item) => (
+            <Button
+              key={item.path}
+              onClick={() => navigate(item.path)}
+              variant={location.pathname === item.path ? 'contained' : 'text'}
+              size="small"
+            >
+              {item.label}
+            </Button>
+          ))}
         </Stack>
       </AppBar>
       <Container maxWidth="md" sx={{ py: { xs: 2, sm: 4 } }}>
         {children}
       </Container>
+
+      <ChangePasswordDialog
+        open={passwordDialogOpen}
+        onClose={() => setPasswordDialogOpen(false)}
+      />
     </Box>
   )
 }
