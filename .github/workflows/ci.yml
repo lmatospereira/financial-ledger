@@ -6,6 +6,15 @@ on:
   pull_request:
     branches: ["**"]
 
+# A push to a branch with an open PR fires both the push and pull_request
+# events for the same commit, running this workflow twice in parallel and
+# — since each completion independently triggers deploy.yml via workflow_run
+# — causing two concurrent deploys to the same environment that collide on
+# the shared GHA build cache. Cancel the redundant run instead.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
 jobs:
   backend-tests:
     runs-on: ubuntu-latest
@@ -27,7 +36,11 @@ jobs:
         working-directory: .
 
       - name: Lint with ruff
-        run: pip install ruff && ruff check backend/
+        # Pinned: an unpinned `ruff` silently picked up a new default
+        # ruleset in 0.16.0 that broke CI on main (see backend/pyproject.toml
+        # for the actual fix — this pin is just for reproducibility going
+        # forward, so a ruff upgrade is a deliberate choice, not a surprise).
+        run: pip install ruff==0.16.0 && ruff check backend/
 
   frontend-build:
     runs-on: ubuntu-latest

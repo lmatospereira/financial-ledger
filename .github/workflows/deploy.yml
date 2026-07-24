@@ -10,6 +10,16 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: lmatospereira/financial-ledger
 
+# Second layer of protection against concurrent same-environment deploys
+# (the primary fix is the concurrency group on ci.yml itself, which stops
+# the duplicate workflow_run events from firing in the first place). Queue
+# rather than cancel: an in-progress `docker compose up -d` shouldn't be
+# killed mid-flight. Keyed on head_branch (== environment 1:1) since that's
+# known before the job runs, unlike the envmap step's output.
+concurrency:
+  group: deploy-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
