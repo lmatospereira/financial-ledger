@@ -222,7 +222,7 @@ def test_budgets_require_auth(client):
 @pytest.fixture()
 def user_a_budget(client, db_session):
     """Set up user A with a budget."""
-    crud.create_user(db_session, username="alice", password_hash=auth.hash_password("alicepass123"))
+    crud.create_user(db_session, username="alice", name="Alice", password_hash=auth.hash_password("alicepass123"))
     response = client.post("/api/auth/login", json={"username": "alice", "password": "alicepass123"})
     assert response.status_code == 200
     headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
