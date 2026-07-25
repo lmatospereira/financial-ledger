@@ -330,7 +330,7 @@ export default function Bills() {
                                 sx={{
                                   display: 'inline-block',
                                   bgcolor: category.color,
-                                  color: '#fff',
+                                  color: 'white',
                                   px: 0.75,
                                   py: 0.25,
                                   borderRadius: 0.5,

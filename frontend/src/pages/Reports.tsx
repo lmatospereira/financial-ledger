@@ -14,6 +14,7 @@ import {
   IconButton,
   Stack,
   Typography,
+  useTheme,
 } from '@mui/material'
 import MonthSelector from '../components/MonthSelector'
 import Layout from '../components/Layout'
@@ -23,7 +24,6 @@ import {
   getMonthlyTrend,
   getSummary,
 } from '../api/client'
-import theme from '../theme'
 import type { CategoryBreakdownEntry, MonthlyTrendEntry, Summary } from '../api/types'
 
 const MONTH_ABBREVIATIONS = [
@@ -52,6 +52,7 @@ function currentPeriod(): { month: number; year: number } {
 }
 
 export default function Reports() {
+  const theme = useTheme()
   const [{ month, year }, setPeriod] = useState(currentPeriod)
   const [trendYear, setTrendYear] = useState(() => currentPeriod().year)
 
@@ -148,7 +149,7 @@ export default function Reports() {
                   height: 44,
                   borderRadius: '50%',
                   bgcolor: 'error.main',
-                  color: '#fff',
+                  color: 'white',
                 }}
               >
                 <TrendingDownIcon />

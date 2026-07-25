@@ -153,7 +153,7 @@ export default function TransactionList({
                         sx={{
                           mt: 0.5,
                           bgcolor: transaction.category.color,
-                          color: '#fff',
+                          color: 'white',
                           height: 20,
                           fontSize: 11,
                         }}
