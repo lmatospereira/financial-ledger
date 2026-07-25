@@ -33,9 +33,9 @@ def count_users(db: Session) -> int:
 
 
 def create_user(
-    db: Session, username: str, password_hash: str, is_admin: bool = False
+    db: Session, username: str, name: str, password_hash: str, is_admin: bool = False
 ) -> models.User:
-    user = models.User(username=username, password_hash=password_hash, is_admin=is_admin)
+    user = models.User(username=username, name=name, password_hash=password_hash, is_admin=is_admin)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -44,6 +44,7 @@ def create_user(
 
 def update_user(db: Session, db_user: models.User, user: schemas.UserUpdate) -> models.User:
     db_user.username = user.username
+    db_user.name = user.name
     db_user.is_admin = user.is_admin
     db.commit()
     db.refresh(db_user)

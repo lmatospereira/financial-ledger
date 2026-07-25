@@ -29,6 +29,7 @@ def create_user(
     return crud.create_user(
         db,
         username=user.username,
+        name=user.name,
         password_hash=auth.hash_password(user.password),
         is_admin=user.is_admin,
     )

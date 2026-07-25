@@ -56,6 +56,7 @@ def seed_admin(db_session):
     return crud.create_user(
         db_session,
         username=TEST_USERNAME,
+        name="Admin",
         password_hash=auth.hash_password(TEST_PASSWORD),
         is_admin=True,
     )

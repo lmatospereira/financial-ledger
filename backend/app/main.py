@@ -79,9 +79,13 @@ def _seed_admin_user() -> None:
             username = os.getenv("ADMIN_USERNAME")
             password = os.getenv("ADMIN_PASSWORD")
             if username and password:
+                username = username.strip().lower()
                 crud.create_user(
                     db,
                     username=username,
+                    # No ADMIN_NAME env var to keep deploy config minimal --
+                    # admins can rename themselves via PUT /api/users/{id}.
+                    name=os.getenv("ADMIN_NAME", username.capitalize()),
                     password_hash=auth.hash_password(password),
                     is_admin=True,
                 )

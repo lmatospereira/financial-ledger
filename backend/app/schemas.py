@@ -2,7 +2,7 @@
 from datetime import date, datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Full set of transaction types, used for read models. "transfer" rows can
 # only be created via POST /api/transfers -- see CreateTransactionType below.
@@ -14,10 +14,19 @@ CreateTransactionType = Literal["income", "expense"]
 AccountType = Literal["checking", "savings", "wallet", "credit_card", "other"]
 
 
+# Usernames are always normalized to lowercase (both at registration and at
+# login) so login is effectively case-insensitive -- "Test"/"TEST"/"test"
+# all resolve to the same account, stored as "test".
+def _normalize_username(v: str) -> str:
+    return v.strip().lower()
+
+
 # ---------- Auth ----------
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+    _normalize_username = field_validator("username")(_normalize_username)
 
 
 class Token(BaseModel):
@@ -31,18 +40,25 @@ class UserOut(BaseModel):
 
     id: int
     username: str
+    name: str
     is_admin: bool
 
 
 class UserCreate(BaseModel):
     username: str
+    name: str
     password: str
     is_admin: bool = False
+
+    _normalize_username = field_validator("username")(_normalize_username)
 
 
 class UserUpdate(BaseModel):
     username: str
+    name: str
     is_admin: bool
+
+    _normalize_username = field_validator("username")(_normalize_username)
 
 
 class PasswordChange(BaseModel):
