@@ -37,6 +37,7 @@ import {
   updateBudget,
 } from '../api/client'
 import type { Budget, BudgetInput, BudgetStatus, Category } from '../api/types'
+import { MAX_AMOUNT } from '../constants'
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -125,6 +126,10 @@ export default function Budgets() {
     }
     if (form.amount <= 0) {
       setFormError('Informe um valor maior que zero.')
+      return
+    }
+    if (form.amount > MAX_AMOUNT) {
+      setFormError(`Informe um valor menor que ${MAX_AMOUNT.toLocaleString('pt-BR')}.`)
       return
     }
 
@@ -315,6 +320,15 @@ export default function Budgets() {
               }
               fullWidth
               autoFocus={!editing}
+              slotProps={{
+                input: {
+                  inputProps: {
+                    max: MAX_AMOUNT,
+                    min: 0.01,
+                    step: 0.01,
+                  },
+                },
+              }}
             />
           </Stack>
         </DialogContent>

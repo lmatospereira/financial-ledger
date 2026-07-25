@@ -12,6 +12,8 @@ import {
 } from '@mui/material'
 import { createTransfer, getApiErrorMessage } from '../api/client'
 import type { Account } from '../api/types'
+import { MAX_AMOUNT } from '../constants'
+import { getDateGuardrails } from '../utils/dateGuardrails'
 
 interface TransferDialogProps {
   open: boolean
@@ -42,6 +44,8 @@ export default function TransferDialog({
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  const dateGuardrails = getDateGuardrails()
+
   useEffect(() => {
     if (open) {
       setForm(emptyForm)
@@ -63,6 +67,10 @@ export default function TransferDialog({
     const amountNumber = Number(form.amount.replace(',', '.'))
     if (!form.amount || Number.isNaN(amountNumber) || amountNumber <= 0) {
       setError('Informe um valor válido maior que zero.')
+      return
+    }
+    if (amountNumber > MAX_AMOUNT) {
+      setError(`Informe um valor menor que ${MAX_AMOUNT.toLocaleString('pt-BR')}.`)
       return
     }
     if (!form.date) {
@@ -142,6 +150,15 @@ export default function TransferDialog({
               fullWidth
               inputMode="decimal"
               placeholder="0,00"
+              slotProps={{
+                input: {
+                  inputProps: {
+                    max: MAX_AMOUNT,
+                    min: 0.01,
+                    step: 0.01,
+                  },
+                },
+              }}
             />
             <TextField
               label="Data"
@@ -149,7 +166,15 @@ export default function TransferDialog({
               value={form.date}
               onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
               fullWidth
-              slotProps={{ inputLabel: { shrink: true } }}
+              slotProps={{
+                inputLabel: { shrink: true },
+                input: {
+                  inputProps: {
+                    min: dateGuardrails.min,
+                    max: dateGuardrails.max,
+                  },
+                },
+              }}
             />
           </Stack>
 

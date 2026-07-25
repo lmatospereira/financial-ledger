@@ -23,6 +23,7 @@ import type {
   Summary,
   Transaction,
   TransactionInput,
+  TransactionType,
   TransferInput,
   UserInput,
   UserUpdateInput,
@@ -152,6 +153,19 @@ export async function createTransaction(
   payload: TransactionInput,
 ): Promise<Transaction> {
   const { data } = await api.post<Transaction>('/transactions', payload)
+  return data
+}
+
+export async function createInstallmentTransaction(payload: {
+  account_id: number
+  category_id: number | null
+  description: string
+  total_amount: number
+  installments: number
+  type: Exclude<TransactionType, 'transfer'>
+  first_date: string
+}): Promise<Transaction[]> {
+  const { data } = await api.post<Transaction[]>('/transactions/installments', payload)
   return data
 }
 
