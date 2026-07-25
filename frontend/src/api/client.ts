@@ -3,6 +3,12 @@ import type {
   Account,
   AccountInput,
   ApiError,
+  Bill,
+  BillInput,
+  BillPayRequest,
+  Budget,
+  BudgetInput,
+  BudgetStatus,
   Category,
   CategoryBreakdownEntry,
   CategoryInput,
@@ -11,6 +17,9 @@ import type {
   LoginRequest,
   LoginResponse,
   MonthlyTrendEntry,
+  RecurringTransaction,
+  RecurringTransactionInput,
+  RecurringTransactionUpdate,
   Summary,
   Transaction,
   TransactionInput,
@@ -212,6 +221,85 @@ export async function getCategoryBreakdown(
 
 export async function getHealth(): Promise<{ status: string }> {
   const { data } = await api.get<{ status: string }>('/health')
+  return data
+}
+
+export async function getBudgets(): Promise<Budget[]> {
+  const { data } = await api.get<Budget[]>('/budgets')
+  return data
+}
+
+export async function createBudget(payload: BudgetInput): Promise<Budget> {
+  const { data } = await api.post<Budget>('/budgets', payload)
+  return data
+}
+
+export async function updateBudget(id: number, payload: BudgetInput): Promise<Budget> {
+  const { data } = await api.put<Budget>(`/budgets/${id}`, payload)
+  return data
+}
+
+export async function deleteBudget(id: number): Promise<void> {
+  await api.delete(`/budgets/${id}`)
+}
+
+export async function getBudgetStatus(month: number, year: number): Promise<BudgetStatus[]> {
+  const { data } = await api.get<BudgetStatus[]>('/budgets/status', {
+    params: { month, year },
+  })
+  return data
+}
+
+export async function getRecurringTransactions(): Promise<RecurringTransaction[]> {
+  const { data } = await api.get<RecurringTransaction[]>('/recurring-transactions')
+  return data
+}
+
+export async function createRecurringTransaction(
+  payload: RecurringTransactionInput,
+): Promise<RecurringTransaction> {
+  const { data } = await api.post<RecurringTransaction>('/recurring-transactions', payload)
+  return data
+}
+
+export async function updateRecurringTransaction(
+  id: number,
+  payload: RecurringTransactionUpdate,
+): Promise<RecurringTransaction> {
+  const { data } = await api.put<RecurringTransaction>(
+    `/recurring-transactions/${id}`,
+    payload,
+  )
+  return data
+}
+
+export async function deleteRecurringTransaction(id: number): Promise<void> {
+  await api.delete(`/recurring-transactions/${id}`)
+}
+
+export async function getBills(paid?: boolean): Promise<Bill[]> {
+  const { data } = await api.get<Bill[]>('/bills', {
+    params: paid !== undefined ? { paid } : {},
+  })
+  return data
+}
+
+export async function createBill(payload: BillInput): Promise<Bill> {
+  const { data } = await api.post<Bill>('/bills', payload)
+  return data
+}
+
+export async function updateBill(id: number, payload: BillInput): Promise<Bill> {
+  const { data } = await api.put<Bill>(`/bills/${id}`, payload)
+  return data
+}
+
+export async function deleteBill(id: number): Promise<void> {
+  await api.delete(`/bills/${id}`)
+}
+
+export async function payBill(id: number, payload: BillPayRequest): Promise<Bill> {
+  const { data } = await api.post<Bill>(`/bills/${id}/pay`, payload)
   return data
 }
 
