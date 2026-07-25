@@ -136,6 +136,7 @@ class TransactionOut(BaseModel):
     category_id: Optional[int] = None
     account_id: int
     to_account_id: Optional[int] = None
+    recurring_transaction_id: Optional[int] = None
     created_at: datetime
     category: Optional[CategoryOut] = None
     account: Optional[AccountRef] = None
@@ -171,3 +172,92 @@ class CategoryTotalOut(BaseModel):
     name: str
     color: str
     total: float
+
+
+# ---------- Budget ----------
+class BudgetBase(BaseModel):
+    category_id: int
+    amount: float = Field(gt=0)
+
+
+class BudgetCreate(BudgetBase):
+    pass
+
+
+class BudgetUpdate(BudgetBase):
+    pass
+
+
+class BudgetOut(BudgetBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+
+
+class BudgetStatusOut(BaseModel):
+    category_id: int
+    category_name: str
+    category_color: str
+    budget_amount: float
+    spent_amount: float
+    percentage: float
+    over_budget: bool
+
+
+# ---------- Recurring Transaction ----------
+class RecurringTransactionBase(BaseModel):
+    account_id: int
+    category_id: Optional[int] = None
+    description: str
+    amount: float = Field(gt=0)
+    type: Literal["income", "expense"]
+    day_of_month: int = Field(ge=1, le=31)
+    start_date: date
+    end_date: Optional[date] = None
+
+
+class RecurringTransactionCreate(RecurringTransactionBase):
+    pass
+
+
+class RecurringTransactionUpdate(RecurringTransactionBase):
+    active: Optional[bool] = None
+
+
+class RecurringTransactionOut(RecurringTransactionBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    active: bool
+    created_at: datetime
+
+
+# ---------- Bill ----------
+class BillBase(BaseModel):
+    account_id: Optional[int] = None
+    category_id: Optional[int] = None
+    description: str
+    amount: float = Field(gt=0)
+    due_date: date
+
+
+class BillCreate(BillBase):
+    pass
+
+
+class BillUpdate(BillBase):
+    pass
+
+
+class BillOut(BillBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    paid: bool
+    paid_transaction_id: Optional[int] = None
+    created_at: datetime
+
+
+class BillPayRequest(BaseModel):
+    account_id: int

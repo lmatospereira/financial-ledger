@@ -1,7 +1,7 @@
-"""SQLAlchemy ORM models: User, Account, Category, Transaction."""
+"""SQLAlchemy ORM models: User, Account, Category, Transaction, Budget, RecurringTransaction, Bill."""
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -61,6 +61,10 @@ class Transaction(Base):
     to_account_id: Mapped[int | None] = mapped_column(
         ForeignKey("accounts.id"), nullable=True, index=True
     )
+    # Links to the recurring transaction rule that generated this transaction.
+    recurring_transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("recurring_transactions.id"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -72,3 +76,56 @@ class Transaction(Base):
     # simple one-directional read relationships used only for serialization.
     account: Mapped["Account"] = relationship(foreign_keys=[account_id])
     to_account: Mapped["Account | None"] = relationship(foreign_keys=[to_account_id])
+
+
+class Budget(Base):
+    __tablename__ = "budgets"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    # Unique constraint on (user_id, category_id): only one budget per category per user
+    __table_args__ = (UniqueConstraint("user_id", "category_id", name="uq_budgets_user_category"),)
+
+
+class RecurringTransaction(Base):
+    __tablename__ = "recurring_transactions"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False)
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
+    description: Mapped[str] = mapped_column(String, nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    type: Mapped[str] = mapped_column(String, nullable=False)  # "income" | "expense"
+    day_of_month: Mapped[int] = mapped_column(nullable=False)  # 1-31
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+
+class Bill(Base):
+    __tablename__ = "bills"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    account_id: Mapped[int | None] = mapped_column(ForeignKey("accounts.id"), nullable=True)
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
+    description: Mapped[str] = mapped_column(String, nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    paid: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    paid_transaction_id: Mapped[int | None] = mapped_column(
+        ForeignKey("transactions.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )

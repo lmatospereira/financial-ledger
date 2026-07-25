@@ -33,6 +33,8 @@ def list_transactions(
         account = crud.get_account(db, account_id, current_user.id)
         if account is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    # Generate any due recurring transactions for the current user
+    crud.generate_due_recurring_transactions(db, current_user.id)
     return crud.get_transactions(db, current_user.id, month, year, account_id)
 
 
