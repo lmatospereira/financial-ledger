@@ -16,17 +16,20 @@ export interface LoginResponse {
 export interface CurrentUser {
   id: number
   username: string
+  name: string
   is_admin: boolean
 }
 
 export type UserInput = {
   username: string
+  name: string
   password: string
   is_admin: boolean
 }
 
 export type UserUpdateInput = {
   username: string
+  name: string
   is_admin: boolean
 }
 

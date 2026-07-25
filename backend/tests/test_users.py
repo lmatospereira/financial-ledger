@@ -12,7 +12,10 @@ def make_regular_user(db_session):
     from app import auth, crud
 
     return crud.create_user(
-        db_session, username="regular", password_hash=auth.hash_password("regularpass123")
+        db_session,
+        username="regular",
+        name="Regular User",
+        password_hash=auth.hash_password("regularpass123"),
     )
 
 
@@ -57,26 +60,50 @@ def test_list_users_as_admin(client, auth_headers, db_session):
 def test_create_user_as_admin(client, auth_headers):
     response = client.post(
         "/api/users",
-        json={"username": "newuser", "password": "newuserpass123", "is_admin": False},
+        json={"username": "newuser", "name": "New User", "password": "newuserpass123", "is_admin": False},
         headers=auth_headers,
     )
     assert response.status_code == 201
     body = response.json()
     assert body["username"] == "newuser"
+    assert body["name"] == "New User"
     assert body["is_admin"] is False
     assert "id" in body
     assert "password" not in body
 
 
+def test_create_user_normalizes_username_to_lowercase(client, auth_headers):
+    response = client.post(
+        "/api/users",
+        json={"username": "  MixedCase  ", "name": "Mixed", "password": "mixedpass123", "is_admin": False},
+        headers=auth_headers,
+    )
+    assert response.status_code == 201
+    assert response.json()["username"] == "mixedcase"
+
+
+def test_login_is_case_insensitive(client, auth_headers):
+    client.post(
+        "/api/users",
+        json={"username": "caseuser", "name": "Case User", "password": "casepass123", "is_admin": False},
+        headers=auth_headers,
+    )
+    for attempt in ("CASEUSER", "CaseUser", "caseuser"):
+        response = client.post(
+            "/api/auth/login", json={"username": attempt, "password": "casepass123"}
+        )
+        assert response.status_code == 200, f"login failed for {attempt!r}: {response.text}"
+
+
 def test_create_user_duplicate_username(client, auth_headers):
     client.post(
         "/api/users",
-        json={"username": "dup", "password": "duppass123", "is_admin": False},
+        json={"username": "dup", "name": "Dup", "password": "duppass123", "is_admin": False},
         headers=auth_headers,
     )
     response = client.post(
         "/api/users",
-        json={"username": "dup", "password": "otherpass123", "is_admin": False},
+        json={"username": "dup", "name": "Dup 2", "password": "otherpass123", "is_admin": False},
         headers=auth_headers,
     )
     assert response.status_code == 400
@@ -87,7 +114,7 @@ def test_create_user_non_admin_forbidden(client, db_session):
     headers = login(client, "regular", "regularpass123")
     response = client.post(
         "/api/users",
-        json={"username": "sneaky", "password": "sneakypass123", "is_admin": True},
+        json={"username": "sneaky", "name": "Sneaky", "password": "sneakypass123", "is_admin": True},
         headers=headers,
     )
     assert response.status_code == 403
@@ -95,7 +122,8 @@ def test_create_user_non_admin_forbidden(client, db_session):
 
 def test_create_user_requires_auth(client):
     response = client.post(
-        "/api/users", json={"username": "x", "password": "xpassword123", "is_admin": False}
+        "/api/users",
+        json={"username": "x", "name": "X", "password": "xpassword123", "is_admin": False},
     )
     assert response.status_code == 401
 
@@ -104,23 +132,26 @@ def test_create_user_requires_auth(client):
 def test_update_user_as_admin(client, auth_headers):
     created = client.post(
         "/api/users",
-        json={"username": "editme", "password": "editmepass123", "is_admin": False},
+        json={"username": "editme", "name": "Edit Me", "password": "editmepass123", "is_admin": False},
         headers=auth_headers,
     ).json()
     response = client.put(
         f"/api/users/{created['id']}",
-        json={"username": "edited", "is_admin": True},
+        json={"username": "edited", "name": "Edited", "is_admin": True},
         headers=auth_headers,
     )
     assert response.status_code == 200
     body = response.json()
     assert body["username"] == "edited"
+    assert body["name"] == "Edited"
     assert body["is_admin"] is True
 
 
 def test_update_user_not_found(client, auth_headers):
     response = client.put(
-        "/api/users/999", json={"username": "x", "is_admin": False}, headers=auth_headers
+        "/api/users/999",
+        json={"username": "x", "name": "X", "is_admin": False},
+        headers=auth_headers,
     )
     assert response.status_code == 404
 
@@ -129,7 +160,7 @@ def test_update_user_non_admin_forbidden(client, db_session):
     make_regular_user(db_session)
     headers = login(client, "regular", "regularpass123")
     response = client.put(
-        "/api/users/1", json={"username": "x", "is_admin": False}, headers=headers
+        "/api/users/1", json={"username": "x", "name": "X", "is_admin": False}, headers=headers
     )
     assert response.status_code == 403
 
@@ -138,7 +169,7 @@ def test_update_user_non_admin_forbidden(client, db_session):
 def test_delete_user_as_admin(client, auth_headers):
     created = client.post(
         "/api/users",
-        json={"username": "deleteme", "password": "deletemepass123", "is_admin": False},
+        json={"username": "deleteme", "name": "Delete Me", "password": "deletemepass123", "is_admin": False},
         headers=auth_headers,
     ).json()
     response = client.delete(f"/api/users/{created['id']}", headers=auth_headers)
@@ -163,7 +194,7 @@ def test_delete_user_non_admin_forbidden(client, db_session):
 def test_delete_user_cascades_accounts_and_transactions(client, auth_headers):
     created = client.post(
         "/api/users",
-        json={"username": "cascadeuser", "password": "cascadepass123", "is_admin": False},
+        json={"username": "cascadeuser", "name": "Cascade User", "password": "cascadepass123", "is_admin": False},
         headers=auth_headers,
     ).json()
     headers = login(client, "cascadeuser", "cascadepass123")
