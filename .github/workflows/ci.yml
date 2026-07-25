@@ -36,7 +36,11 @@ jobs:
         working-directory: .
 
       - name: Lint with ruff
-        run: pip install ruff && ruff check backend/
+        # Pinned: an unpinned `ruff` silently picked up a new default
+        # ruleset in 0.16.0 that broke CI on main (see backend/pyproject.toml
+        # for the actual fix — this pin is just for reproducibility going
+        # forward, so a ruff upgrade is a deliberate choice, not a surprise).
+        run: pip install ruff==0.16.0 && ruff check backend/
 
   frontend-build:
     runs-on: ubuntu-latest
