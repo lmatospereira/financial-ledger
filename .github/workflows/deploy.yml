@@ -115,8 +115,13 @@ jobs:
           # (e.g. right after a release merge triggers a develop sync-back),
           # and a shared cache scope causes them to collide on the same
           # cache key and fail the whole build.
+          # ignore-error=true on cache-to: the GHA cache backend has been
+          # observed failing transiently ("failed to reserve cache" / "error
+          # writing layer blob") even with no concurrent writer and correct
+          # permissions -- caching is an optimization, not something that
+          # should ever fail an otherwise-good build.
           cache-from: type=gha,scope=${{ steps.envmap.outputs.name }}
-          cache-to: type=gha,mode=max,scope=${{ steps.envmap.outputs.name }}
+          cache-to: type=gha,mode=max,scope=${{ steps.envmap.outputs.name }},ignore-error=true
 
       - id: image
         if: steps.envmap.outputs.skip != 'true'
