@@ -40,6 +40,8 @@ import {
   updateBill,
 } from '../api/client'
 import type { Account, Bill, BillInput, Category } from '../api/types'
+import { MAX_AMOUNT } from '../constants'
+import { getDateGuardrails } from '../utils/dateGuardrails'
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -159,6 +161,8 @@ export default function Bills() {
     setFormOpen(true)
   }
 
+  const dateGuardrails = getDateGuardrails()
+
   const handleSubmit = async () => {
     setFormError(null)
     if (!form.description.trim()) {
@@ -167,6 +171,10 @@ export default function Bills() {
     }
     if (form.amount <= 0) {
       setFormError('Informe um valor maior que zero.')
+      return
+    }
+    if (form.amount > MAX_AMOUNT) {
+      setFormError(`Informe um valor menor que ${MAX_AMOUNT.toLocaleString('pt-BR')}.`)
       return
     }
 
@@ -386,6 +394,15 @@ export default function Bills() {
                 setForm((prev) => ({ ...prev, amount: Number(e.target.value) }))
               }
               fullWidth
+              slotProps={{
+                input: {
+                  inputProps: {
+                    max: MAX_AMOUNT,
+                    min: 0.01,
+                    step: 0.01,
+                  },
+                },
+              }}
             />
 
             <TextField
@@ -396,7 +413,15 @@ export default function Bills() {
                 setForm((prev) => ({ ...prev, due_date: e.target.value }))
               }
               fullWidth
-              slotProps={{ inputLabel: { shrink: true } }}
+              slotProps={{
+                inputLabel: { shrink: true },
+                input: {
+                  inputProps: {
+                    min: dateGuardrails.min,
+                    max: dateGuardrails.max,
+                  },
+                },
+              }}
             />
 
             <TextField

@@ -44,14 +44,14 @@ export default function BalanceCard({ summary, loading }: BalanceCardProps) {
               >
                 <AccountBalanceWalletIcon />
               </Box>
-              <Box>
+              <Box sx={{ minWidth: 0 }}>
                 <Typography variant="body2" color="text.secondary">
                   Saldo atual
                 </Typography>
                 <Typography
                   variant="h5"
                   color={balance >= 0 ? 'success.main' : 'error.main'}
-                  sx={{ fontWeight: 700 }}
+                  sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                 >
                   {loading ? '—' : formatCurrency(balance)}
                 </Typography>

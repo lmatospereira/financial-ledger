@@ -239,7 +239,7 @@ export default function Accounts() {
                       <Typography
                         variant="h6"
                         color={account.balance >= 0 ? 'success.main' : 'error.main'}
-                        sx={{ fontWeight: 700 }}
+                        sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                       >
                         {currencyFormatter.format(account.balance)}
                       </Typography>

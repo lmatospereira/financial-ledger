@@ -89,6 +89,9 @@ export interface Transaction {
   to_account?: AccountRef | null
   // Set when transaction was generated from a recurring transaction rule.
   recurring_transaction_id?: number | null
+  // Set when transaction is part of an installment purchase.
+  installment_number?: number | null
+  installment_total?: number | null
 }
 
 export type TransactionInput = Omit<
