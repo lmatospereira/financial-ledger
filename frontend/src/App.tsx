@@ -4,7 +4,10 @@ import { useAuth } from './context/authContext'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Accounts from './pages/Accounts'
+import Bills from './pages/Bills'
+import Budgets from './pages/Budgets'
 import Categories from './pages/Categories'
+import Recurring from './pages/Recurring'
 import Reports from './pages/Reports'
 import Users from './pages/Users'
 
@@ -72,6 +75,30 @@ function App() {
         element={
           <RequireAuth>
             <Categories />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/budgets"
+        element={
+          <RequireAuth>
+            <Budgets />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/recurring"
+        element={
+          <RequireAuth>
+            <Recurring />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/bills"
+        element={
+          <RequireAuth>
+            <Bills />
           </RequireAuth>
         }
       />

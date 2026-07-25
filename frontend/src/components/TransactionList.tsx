@@ -2,6 +2,7 @@ import { useState } from 'react'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
+import RepeatIcon from '@mui/icons-material/Repeat'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import {
   Box,
@@ -18,6 +19,7 @@ import {
   ListItem,
   ListItemText,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import type { Transaction } from '../api/types'
@@ -126,6 +128,15 @@ export default function TransactionList({
                     color="info"
                     sx={{ mr: 1, flexShrink: 0 }}
                   />
+                )}
+                {transaction.recurring_transaction_id && (
+                  <Tooltip title="Gerado por regra recorrente">
+                    <RepeatIcon
+                      fontSize="small"
+                      color="action"
+                      sx={{ mr: 1, flexShrink: 0 }}
+                    />
+                  </Tooltip>
                 )}
                 <ListItemText
                   primary={transaction.description || 'Transferência'}
