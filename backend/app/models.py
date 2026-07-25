@@ -68,6 +68,10 @@ class Transaction(Base):
     recurring_transaction_id: Mapped[int | None] = mapped_column(
         ForeignKey("recurring_transactions.id"), nullable=True
     )
+    # Installment fields: set when this transaction is part of a parcelamento
+    installment_number: Mapped[int | None] = mapped_column(nullable=True)  # 1-based
+    installment_total: Mapped[int | None] = mapped_column(nullable=True)  # total count of installments
+    installment_group_id: Mapped[str | None] = mapped_column(String, nullable=True)  # UUID hex string
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )

@@ -1,6 +1,7 @@
 """Database access helpers used by the routers."""
 from datetime import date, datetime, timezone
 from calendar import monthrange
+from uuid import uuid4
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -241,6 +242,60 @@ def update_transaction(
 def delete_transaction(db: Session, db_transaction: models.Transaction) -> None:
     db.delete(db_transaction)
     db.commit()
+
+
+def create_installments(
+    db: Session, user_id: int, installment: schemas.InstallmentCreate
+) -> list[models.Transaction]:
+    """Create multiple installment transactions for a parcelamento purchase.
+
+    Calculates per-installment amounts with the last one absorbing rounding remainder.
+    Dates advance by 1 month each, clamping to the last day of short months.
+    """
+    group_id = uuid4().hex
+    per_installment = round(installment.total_amount / installment.installments, 2)
+    remainder = round(installment.total_amount - (per_installment * (installment.installments - 1)), 2)
+
+    transactions = []
+    current_date = installment.first_date
+    original_day = installment.first_date.day
+
+    for i in range(1, installment.installments + 1):
+        # Last installment absorbs rounding remainder
+        amount = remainder if i == installment.installments else per_installment
+
+        tx = models.Transaction(
+            date=current_date,
+            description=installment.description,
+            amount=amount,
+            type=installment.type,
+            category_id=installment.category_id,
+            user_id=user_id,
+            account_id=installment.account_id,
+            installment_number=i,
+            installment_total=installment.installments,
+            installment_group_id=group_id,
+        )
+        db.add(tx)
+        transactions.append(tx)
+
+        # Advance to next month, clamping day-of-month if needed
+        if i < installment.installments:
+            if current_date.month == 12:
+                next_year = current_date.year + 1
+                next_month_num = 1
+            else:
+                next_year = current_date.year
+                next_month_num = current_date.month + 1
+            _, days_in_month = monthrange(next_year, next_month_num)
+            day = min(original_day, days_in_month)
+            current_date = date(next_year, next_month_num, day)
+
+    db.commit()
+    for tx in transactions:
+        db.refresh(tx)
+
+    return transactions
 
 
 def create_transfer(db: Session, user_id: int, transfer: schemas.TransferCreate) -> models.Transaction:
