@@ -264,7 +264,7 @@ export default function Recurring() {
                                   variant="caption"
                                   sx={{
                                     bgcolor: category.color,
-                                    color: '#fff',
+                                    color: 'white',
                                     px: 0.75,
                                     py: 0.25,
                                     borderRadius: 0.5,

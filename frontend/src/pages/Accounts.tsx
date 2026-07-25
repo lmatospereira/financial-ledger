@@ -202,7 +202,7 @@ export default function Accounts() {
                             height: 40,
                             borderRadius: '50%',
                             bgcolor: account.color,
-                            color: '#fff',
+                            color: 'white',
                             flexShrink: 0,
                           }}
                         >
