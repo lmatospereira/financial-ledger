@@ -16,17 +16,20 @@ export interface LoginResponse {
 export interface CurrentUser {
   id: number
   username: string
+  name: string
   is_admin: boolean
 }
 
 export type UserInput = {
   username: string
+  name: string
   password: string
   is_admin: boolean
 }
 
 export type UserUpdateInput = {
   username: string
+  name: string
   is_admin: boolean
 }
 
@@ -84,6 +87,11 @@ export interface Transaction {
   // Nullable/omitted for income & expense rows.
   to_account_id?: number | null
   to_account?: AccountRef | null
+  // Set when transaction was generated from a recurring transaction rule.
+  recurring_transaction_id?: number | null
+  // Set when transaction is part of an installment purchase.
+  installment_number?: number | null
+  installment_total?: number | null
 }
 
 export type TransactionInput = Omit<
@@ -133,4 +141,68 @@ export interface ApiValidationErrorItem {
 
 export interface ApiError {
   detail: string | ApiValidationErrorItem[]
+}
+
+// ---------- Budget ----------
+export interface Budget {
+  id: number
+  category_id: number
+  amount: number
+  created_at: string
+}
+
+export type BudgetInput = Omit<Budget, 'id' | 'created_at'>
+
+export interface BudgetStatus {
+  category_id: number
+  category_name: string
+  category_color: string
+  budget_amount: number
+  spent_amount: number
+  percentage: number
+  over_budget: boolean
+}
+
+// ---------- Recurring Transaction ----------
+export interface RecurringTransaction {
+  id: number
+  account_id: number
+  category_id: number | null
+  description: string
+  amount: number
+  type: Exclude<TransactionType, 'transfer'>
+  day_of_month: number // 1-31
+  start_date: string // ISO date
+  end_date: string | null // ISO date
+  active: boolean
+  created_at: string
+}
+
+export type RecurringTransactionInput = Omit<
+  RecurringTransaction,
+  'id' | 'active' | 'created_at'
+>
+
+export type RecurringTransactionUpdate = Omit<
+  RecurringTransaction,
+  'id' | 'created_at'
+>
+
+// ---------- Bill ----------
+export interface Bill {
+  id: number
+  account_id: number | null
+  category_id: number | null
+  description: string
+  amount: number
+  due_date: string // ISO date
+  paid: boolean
+  paid_transaction_id: number | null
+  created_at: string
+}
+
+export type BillInput = Omit<Bill, 'id' | 'paid' | 'paid_transaction_id' | 'created_at'>
+
+export interface BillPayRequest {
+  account_id: number
 }

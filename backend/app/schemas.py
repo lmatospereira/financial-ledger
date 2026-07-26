@@ -2,7 +2,7 @@
 from datetime import date, datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Full set of transaction types, used for read models. "transfer" rows can
 # only be created via POST /api/transfers -- see CreateTransactionType below.
@@ -13,11 +13,33 @@ CreateTransactionType = Literal["income", "expense"]
 
 AccountType = Literal["checking", "savings", "wallet", "credit_card", "other"]
 
+# Guardrail: maximum transaction amount
+MAX_AMOUNT = 999_999_999.99
+
+
+# Usernames are always normalized to lowercase (both at registration and at
+# login) so login is effectively case-insensitive -- "Test"/"TEST"/"test"
+# all resolve to the same account, stored as "test".
+def _normalize_username(v: str) -> str:
+    return v.strip().lower()
+
+
+# Date must be within 3 years before or after today.
+def _validate_date_range(v: date) -> date:
+    today = date.today()
+    min_date = today.replace(year=today.year - 3)
+    max_date = today.replace(year=today.year + 3)
+    if not (min_date <= v <= max_date):
+        raise ValueError(f"date must be between {min_date} and {max_date}")
+    return v
+
 
 # ---------- Auth ----------
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+    _normalize_username = field_validator("username")(_normalize_username)
 
 
 class Token(BaseModel):
@@ -31,18 +53,25 @@ class UserOut(BaseModel):
 
     id: int
     username: str
+    name: str
     is_admin: bool
 
 
 class UserCreate(BaseModel):
     username: str
+    name: str
     password: str
     is_admin: bool = False
+
+    _normalize_username = field_validator("username")(_normalize_username)
 
 
 class UserUpdate(BaseModel):
     username: str
+    name: str
     is_admin: bool
+
+    _normalize_username = field_validator("username")(_normalize_username)
 
 
 class PasswordChange(BaseModel):
@@ -111,10 +140,12 @@ class CategoryOut(CategoryBase):
 class TransactionBase(BaseModel):
     date: date
     description: str
-    amount: float = Field(gt=0)
+    amount: float = Field(gt=0, le=MAX_AMOUNT)
     type: CreateTransactionType
     category_id: Optional[int] = None
     account_id: int
+
+    _validate_date = field_validator("date")(_validate_date_range)
 
 
 class TransactionCreate(TransactionBase):
@@ -136,6 +167,9 @@ class TransactionOut(BaseModel):
     category_id: Optional[int] = None
     account_id: int
     to_account_id: Optional[int] = None
+    recurring_transaction_id: Optional[int] = None
+    installment_number: Optional[int] = None
+    installment_total: Optional[int] = None
     created_at: datetime
     category: Optional[CategoryOut] = None
     account: Optional[AccountRef] = None
@@ -146,9 +180,11 @@ class TransactionOut(BaseModel):
 class TransferCreate(BaseModel):
     from_account_id: int
     to_account_id: int
-    amount: float = Field(gt=0)
+    amount: float = Field(gt=0, le=MAX_AMOUNT)
     date: date
     description: str
+
+    _validate_date = field_validator("date")(_validate_date_range)
 
 
 # ---------- Summary ----------
@@ -171,3 +207,116 @@ class CategoryTotalOut(BaseModel):
     name: str
     color: str
     total: float
+
+
+# ---------- Budget ----------
+class BudgetBase(BaseModel):
+    category_id: int
+    amount: float = Field(gt=0, le=MAX_AMOUNT)
+
+
+class BudgetCreate(BudgetBase):
+    pass
+
+
+class BudgetUpdate(BudgetBase):
+    pass
+
+
+class BudgetOut(BudgetBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+
+
+class BudgetStatusOut(BaseModel):
+    category_id: int
+    category_name: str
+    category_color: str
+    budget_amount: float
+    spent_amount: float
+    percentage: float
+    over_budget: bool
+
+
+# ---------- Recurring Transaction ----------
+class RecurringTransactionBase(BaseModel):
+    account_id: int
+    category_id: Optional[int] = None
+    description: str
+    amount: float = Field(gt=0, le=MAX_AMOUNT)
+    type: Literal["income", "expense"]
+    day_of_month: int = Field(ge=1, le=31)
+    start_date: date
+    end_date: Optional[date] = None
+
+    _validate_start_date = field_validator("start_date")(_validate_date_range)
+
+    @field_validator("end_date")
+    @classmethod
+    def _validate_end_date(cls, v: Optional[date]) -> Optional[date]:
+        if v is None:
+            return v
+        return _validate_date_range(v)
+
+
+class RecurringTransactionCreate(RecurringTransactionBase):
+    pass
+
+
+class RecurringTransactionUpdate(RecurringTransactionBase):
+    active: Optional[bool] = None
+
+
+class RecurringTransactionOut(RecurringTransactionBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    active: bool
+    created_at: datetime
+
+
+# ---------- Bill ----------
+class BillBase(BaseModel):
+    account_id: Optional[int] = None
+    category_id: Optional[int] = None
+    description: str
+    amount: float = Field(gt=0, le=MAX_AMOUNT)
+    due_date: date
+
+    _validate_due_date = field_validator("due_date")(_validate_date_range)
+
+
+class BillCreate(BillBase):
+    pass
+
+
+class BillUpdate(BillBase):
+    pass
+
+
+class BillOut(BillBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    paid: bool
+    paid_transaction_id: Optional[int] = None
+    created_at: datetime
+
+
+class BillPayRequest(BaseModel):
+    account_id: int
+
+
+# ---------- Installment ----------
+class InstallmentCreate(BaseModel):
+    account_id: int
+    category_id: Optional[int] = None
+    description: str
+    total_amount: float = Field(gt=0, le=MAX_AMOUNT)
+    installments: int = Field(ge=1, le=420)
+    type: CreateTransactionType
+    first_date: date
+
+    _validate_first_date = field_validator("first_date")(_validate_date_range)

@@ -33,6 +33,8 @@ def list_transactions(
         account = crud.get_account(db, account_id, current_user.id)
         if account is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    # Generate any due recurring transactions for the current user
+    crud.generate_due_recurring_transactions(db, current_user.id)
     return crud.get_transactions(db, current_user.id, month, year, account_id)
 
 
@@ -50,6 +52,22 @@ def create_transaction(
         if category is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
     return crud.create_transaction(db, current_user.id, transaction)
+
+
+@router.post("/transactions/installments", response_model=list[schemas.TransactionOut], status_code=status.HTTP_201_CREATED)
+def create_installments(
+    installment: schemas.InstallmentCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    account = crud.get_account(db, installment.account_id, current_user.id)
+    if account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    if installment.category_id is not None:
+        category = crud.get_category(db, installment.category_id, current_user.id)
+        if category is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
+    return crud.create_installments(db, current_user.id, installment)
 
 
 @router.put("/transactions/{transaction_id}", response_model=schemas.TransactionOut)

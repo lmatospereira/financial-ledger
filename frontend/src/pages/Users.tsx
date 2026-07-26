@@ -40,12 +40,14 @@ import type { CurrentUser } from '../api/types'
 
 interface UserFormState {
   username: string
+  name: string
   password: string
   is_admin: boolean
 }
 
 const emptyForm: UserFormState = {
   username: '',
+  name: '',
   password: '',
   is_admin: false,
 }
@@ -93,7 +95,7 @@ export default function Users() {
 
   const openEditForm = (user: CurrentUser) => {
     setEditing(user)
-    setForm({ username: user.username, password: '', is_admin: user.is_admin })
+    setForm({ username: user.username, name: user.name, password: '', is_admin: user.is_admin })
     setFormError(null)
     setFormOpen(true)
   }
@@ -102,6 +104,10 @@ export default function Users() {
     setFormError(null)
     if (!form.username.trim()) {
       setFormError('Informe um nome de usuário.')
+      return
+    }
+    if (!form.name.trim()) {
+      setFormError('Informe o nome.')
       return
     }
     if (!editing && form.password.length < 6) {
@@ -113,12 +119,16 @@ export default function Users() {
     try {
       if (editing) {
         await updateUser(editing.id, {
-          username: form.username.trim(),
+          // Backend always lowercases the username, but normalize it here
+          // too so the UI reflects the actual stored value immediately.
+          username: form.username.trim().toLowerCase(),
+          name: form.name.trim(),
           is_admin: form.is_admin,
         })
       } else {
         await createUser({
-          username: form.username.trim(),
+          username: form.username.trim().toLowerCase(),
+          name: form.name.trim(),
           password: form.password,
           is_admin: form.is_admin,
         })
@@ -201,7 +211,10 @@ export default function Users() {
                     <ListItemText
                       primary={
                         <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                          <span>{user.username}</span>
+                          <span>{user.name}</span>
+                          <Typography variant="body2" color="text.secondary">
+                            @{user.username}
+                          </Typography>
                           {user.id === currentUser?.id && (
                             <Chip label="Você" size="small" variant="outlined" />
                           )}
@@ -233,14 +246,23 @@ export default function Users() {
             {formError && <Alert severity="error">{formError}</Alert>}
 
             <TextField
+              label="Nome"
+              value={form.name}
+              onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+              fullWidth
+              autoFocus
+              autoComplete="name"
+            />
+
+            <TextField
               label="Usuário"
               value={form.username}
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, username: e.target.value }))
               }
               fullWidth
-              autoFocus
               autoComplete="username"
+              helperText="Sempre salvo em minúsculo, sem espaços"
             />
 
             {!editing && (
@@ -287,8 +309,8 @@ export default function Users() {
             <Alert severity="error">{deleteError}</Alert>
           ) : (
             <DialogContentText>
-              Tem certeza que deseja excluir “{pendingDelete?.username}”? Essa
-              ação não pode ser desfeita.
+              Tem certeza que deseja excluir “{pendingDelete?.name}” (@{pendingDelete?.username})?
+              Essa ação não pode ser desfeita.
             </DialogContentText>
           )}
         </DialogContent>

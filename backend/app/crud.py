@@ -1,6 +1,7 @@
 """Database access helpers used by the routers."""
-from datetime import date
+from datetime import date, datetime, timezone
 from calendar import monthrange
+from uuid import uuid4
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
@@ -33,9 +34,9 @@ def count_users(db: Session) -> int:
 
 
 def create_user(
-    db: Session, username: str, password_hash: str, is_admin: bool = False
+    db: Session, username: str, name: str, password_hash: str, is_admin: bool = False
 ) -> models.User:
-    user = models.User(username=username, password_hash=password_hash, is_admin=is_admin)
+    user = models.User(username=username, name=name, password_hash=password_hash, is_admin=is_admin)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -44,6 +45,7 @@ def create_user(
 
 def update_user(db: Session, db_user: models.User, user: schemas.UserUpdate) -> models.User:
     db_user.username = user.username
+    db_user.name = user.name
     db_user.is_admin = user.is_admin
     db.commit()
     db.refresh(db_user)
@@ -62,6 +64,9 @@ def delete_user(db: Session, db_user: models.User) -> None:
     # before the user row itself, rather than relying on ORM relationship
     # cascades (Transaction has two FKs into accounts, which complicates
     # relationship-based cascade configuration).
+    db.query(models.Bill).filter(models.Bill.user_id == db_user.id).delete()
+    db.query(models.Budget).filter(models.Budget.user_id == db_user.id).delete()
+    db.query(models.RecurringTransaction).filter(models.RecurringTransaction.user_id == db_user.id).delete()
     db.query(models.Transaction).filter(models.Transaction.user_id == db_user.id).delete()
     db.query(models.Account).filter(models.Account.user_id == db_user.id).delete()
     db.query(models.Category).filter(models.Category.user_id == db_user.id).delete()
@@ -239,6 +244,60 @@ def delete_transaction(db: Session, db_transaction: models.Transaction) -> None:
     db.commit()
 
 
+def create_installments(
+    db: Session, user_id: int, installment: schemas.InstallmentCreate
+) -> list[models.Transaction]:
+    """Create multiple installment transactions for a parcelamento purchase.
+
+    Calculates per-installment amounts with the last one absorbing rounding remainder.
+    Dates advance by 1 month each, clamping to the last day of short months.
+    """
+    group_id = uuid4().hex
+    per_installment = round(installment.total_amount / installment.installments, 2)
+    remainder = round(installment.total_amount - (per_installment * (installment.installments - 1)), 2)
+
+    transactions = []
+    current_date = installment.first_date
+    original_day = installment.first_date.day
+
+    for i in range(1, installment.installments + 1):
+        # Last installment absorbs rounding remainder
+        amount = remainder if i == installment.installments else per_installment
+
+        tx = models.Transaction(
+            date=current_date,
+            description=installment.description,
+            amount=amount,
+            type=installment.type,
+            category_id=installment.category_id,
+            user_id=user_id,
+            account_id=installment.account_id,
+            installment_number=i,
+            installment_total=installment.installments,
+            installment_group_id=group_id,
+        )
+        db.add(tx)
+        transactions.append(tx)
+
+        # Advance to next month, clamping day-of-month if needed
+        if i < installment.installments:
+            if current_date.month == 12:
+                next_year = current_date.year + 1
+                next_month_num = 1
+            else:
+                next_year = current_date.year
+                next_month_num = current_date.month + 1
+            _, days_in_month = monthrange(next_year, next_month_num)
+            day = min(original_day, days_in_month)
+            current_date = date(next_year, next_month_num, day)
+
+    db.commit()
+    for tx in transactions:
+        db.refresh(tx)
+
+    return transactions
+
+
 def create_transfer(db: Session, user_id: int, transfer: schemas.TransferCreate) -> models.Transaction:
     db_transaction = models.Transaction(
         date=transfer.date,
@@ -367,3 +426,277 @@ def get_category_totals(db: Session, user_id: int, month: int, year: int) -> lis
             )
         )
     return results
+
+
+# ---------- Budget ----------
+def get_budgets(db: Session, user_id: int) -> list[models.Budget]:
+    return (
+        db.query(models.Budget)
+        .filter(models.Budget.user_id == user_id)
+        .order_by(models.Budget.created_at)
+        .all()
+    )
+
+
+def get_budget(db: Session, budget_id: int, user_id: int) -> models.Budget | None:
+    return (
+        db.query(models.Budget)
+        .filter(models.Budget.id == budget_id, models.Budget.user_id == user_id)
+        .first()
+    )
+
+
+def get_budget_by_category(db: Session, user_id: int, category_id: int) -> models.Budget | None:
+    return (
+        db.query(models.Budget)
+        .filter(models.Budget.user_id == user_id, models.Budget.category_id == category_id)
+        .first()
+    )
+
+
+def create_budget(db: Session, user_id: int, budget: schemas.BudgetCreate) -> models.Budget:
+    db_budget = models.Budget(**budget.model_dump(), user_id=user_id)
+    db.add(db_budget)
+    db.commit()
+    db.refresh(db_budget)
+    return db_budget
+
+
+def update_budget(
+    db: Session, db_budget: models.Budget, budget: schemas.BudgetUpdate
+) -> models.Budget:
+    for field, value in budget.model_dump().items():
+        setattr(db_budget, field, value)
+    db.commit()
+    db.refresh(db_budget)
+    return db_budget
+
+
+def delete_budget(db: Session, db_budget: models.Budget) -> None:
+    db.delete(db_budget)
+    db.commit()
+
+
+def get_budget_status(
+    db: Session, user_id: int, month: int, year: int
+) -> list[schemas.BudgetStatusOut]:
+    """For each budget the user has, calculate spent amount and return status."""
+    budgets = get_budgets(db, user_id)
+    start = date(year, month, 1)
+    end = date(year, month, monthrange(year, month)[1])
+
+    results = []
+    for budget in budgets:
+        category = get_category(db, budget.category_id, user_id)
+        if category is None:
+            continue
+
+        spent = _sum_where(
+            db,
+            models.Transaction.user_id == user_id,
+            models.Transaction.type == "expense",
+            models.Transaction.category_id == budget.category_id,
+            models.Transaction.date >= start,
+            models.Transaction.date <= end,
+        )
+
+        percentage = (spent / budget.amount * 100) if budget.amount > 0 else 0.0
+        over_budget = spent > budget.amount
+
+        results.append(
+            schemas.BudgetStatusOut(
+                category_id=budget.category_id,
+                category_name=category.name,
+                category_color=category.color,
+                budget_amount=budget.amount,
+                spent_amount=spent,
+                percentage=percentage,
+                over_budget=over_budget,
+            )
+        )
+    return results
+
+
+# ---------- Recurring Transaction ----------
+def get_recurring_transactions(db: Session, user_id: int) -> list[models.RecurringTransaction]:
+    return (
+        db.query(models.RecurringTransaction)
+        .filter(models.RecurringTransaction.user_id == user_id)
+        .order_by(models.RecurringTransaction.created_at)
+        .all()
+    )
+
+
+def get_recurring_transaction(
+    db: Session, recurring_transaction_id: int, user_id: int
+) -> models.RecurringTransaction | None:
+    return (
+        db.query(models.RecurringTransaction)
+        .filter(
+            models.RecurringTransaction.id == recurring_transaction_id,
+            models.RecurringTransaction.user_id == user_id,
+        )
+        .first()
+    )
+
+
+def create_recurring_transaction(
+    db: Session, user_id: int, rt: schemas.RecurringTransactionCreate
+) -> models.RecurringTransaction:
+    db_rt = models.RecurringTransaction(**rt.model_dump(), user_id=user_id)
+    db.add(db_rt)
+    db.commit()
+    db.refresh(db_rt)
+    return db_rt
+
+
+def update_recurring_transaction(
+    db: Session,
+    db_rt: models.RecurringTransaction,
+    rt: schemas.RecurringTransactionUpdate,
+) -> models.RecurringTransaction:
+    for field, value in rt.model_dump(exclude_none=True).items():
+        setattr(db_rt, field, value)
+    db.commit()
+    db.refresh(db_rt)
+    return db_rt
+
+
+def delete_recurring_transaction(db: Session, db_rt: models.RecurringTransaction) -> None:
+    db.delete(db_rt)
+    db.commit()
+
+
+def generate_due_recurring_transactions(
+    db: Session, user_id: int, up_to_date: date | None = None
+) -> None:
+    """Generate any due recurring transactions up to up_to_date.
+
+    For each active RecurringTransaction, walk month by month from start_date
+    (or latest generated month) up to up_to_date, creating a Transaction for
+    each month where day_of_month has occurred and no transaction exists yet.
+    Idempotent: calling multiple times for the same period does nothing.
+    """
+    if up_to_date is None:
+        up_to_date = date.today()
+
+    recurring = (
+        db.query(models.RecurringTransaction)
+        .filter(
+            models.RecurringTransaction.user_id == user_id,
+            models.RecurringTransaction.active,
+            models.RecurringTransaction.start_date <= up_to_date,
+        )
+        .all()
+    )
+
+    for rt in recurring:
+        if rt.end_date is not None and rt.end_date < up_to_date:
+            # Rule ended before up_to_date
+            last_month_to_generate = date(rt.end_date.year, rt.end_date.month, 1)
+        else:
+            last_month_to_generate = date(up_to_date.year, up_to_date.month, 1)
+
+        # Find the latest month we've already generated a transaction for this rule
+        latest_generated = (
+            db.query(func.max(models.Transaction.date))
+            .filter(
+                models.Transaction.user_id == user_id,
+                models.Transaction.recurring_transaction_id == rt.id,
+            )
+            .scalar()
+        )
+
+        # Start from the month after the latest generated, or from start_date
+        if latest_generated:
+            current_month = date(latest_generated.year, latest_generated.month, 1)
+            # Move to next month
+            if latest_generated.month == 12:
+                current_month = date(latest_generated.year + 1, 1, 1)
+            else:
+                current_month = date(latest_generated.year, latest_generated.month + 1, 1)
+        else:
+            current_month = date(rt.start_date.year, rt.start_date.month, 1)
+
+        # Generate transactions for each month
+        while current_month <= last_month_to_generate:
+            # Determine the transaction date for this month
+            # Use day_of_month, or last day of month if day doesn't exist
+            _, days_in_month = monthrange(current_month.year, current_month.month)
+            tx_day = min(rt.day_of_month, days_in_month)
+            tx_date = date(current_month.year, current_month.month, tx_day)
+
+            # Check if this date is within the rule's active period
+            if tx_date >= rt.start_date and (rt.end_date is None or tx_date <= rt.end_date):
+                # Check if transaction already exists for this month
+                existing = (
+                    db.query(models.Transaction)
+                    .filter(
+                        models.Transaction.recurring_transaction_id == rt.id,
+                        models.Transaction.date.between(
+                            date(current_month.year, current_month.month, 1),
+                            date(current_month.year, current_month.month, days_in_month),
+                        ),
+                    )
+                    .first()
+                )
+
+                if not existing:
+                    # Create the transaction
+                    tx = models.Transaction(
+                        date=tx_date,
+                        description=rt.description,
+                        amount=rt.amount,
+                        type=rt.type,
+                        category_id=rt.category_id,
+                        user_id=user_id,
+                        account_id=rt.account_id,
+                        recurring_transaction_id=rt.id,
+                        created_at=datetime.now(timezone.utc),
+                    )
+                    db.add(tx)
+
+            # Move to next month
+            if current_month.month == 12:
+                current_month = date(current_month.year + 1, 1, 1)
+            else:
+                current_month = date(current_month.year, current_month.month + 1, 1)
+
+    db.commit()
+
+
+# ---------- Bill ----------
+def get_bills(db: Session, user_id: int, paid: bool | None = None) -> list[models.Bill]:
+    query = db.query(models.Bill).filter(models.Bill.user_id == user_id)
+    if paid is not None:
+        query = query.filter(models.Bill.paid == paid)
+    return query.order_by(models.Bill.due_date).all()
+
+
+def get_bill(db: Session, bill_id: int, user_id: int) -> models.Bill | None:
+    return (
+        db.query(models.Bill)
+        .filter(models.Bill.id == bill_id, models.Bill.user_id == user_id)
+        .first()
+    )
+
+
+def create_bill(db: Session, user_id: int, bill: schemas.BillCreate) -> models.Bill:
+    db_bill = models.Bill(**bill.model_dump(), user_id=user_id)
+    db.add(db_bill)
+    db.commit()
+    db.refresh(db_bill)
+    return db_bill
+
+
+def update_bill(db: Session, db_bill: models.Bill, bill: schemas.BillUpdate) -> models.Bill:
+    for field, value in bill.model_dump().items():
+        setattr(db_bill, field, value)
+    db.commit()
+    db.refresh(db_bill)
+    return db_bill
+
+
+def delete_bill(db: Session, db_bill: models.Bill) -> None:
+    db.delete(db_bill)
+    db.commit()

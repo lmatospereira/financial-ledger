@@ -7,6 +7,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
   MenuItem,
   Stack,
   TextField,
@@ -14,6 +15,9 @@ import {
   ToggleButtonGroup,
 } from '@mui/material'
 import type { Account, Category, Transaction, TransactionInput } from '../api/types'
+import { createInstallmentTransaction } from '../api/client'
+import { MAX_AMOUNT } from '../constants'
+import { getDateGuardrails } from '../utils/dateGuardrails'
 
 interface TransactionFormProps {
   open: boolean
@@ -37,6 +41,8 @@ function buildEmptyForm(defaultAccountId?: number | null) {
     date: todayIso(),
     category_id: '' as number | '',
     account_id: (defaultAccountId ?? '') as number | '',
+    isInstallment: false,
+    installments: '',
   }
 }
 
@@ -53,6 +59,8 @@ export default function TransactionForm({
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  const dateGuardrails = getDateGuardrails()
+
   useEffect(() => {
     if (!open) return
     if (initialValue) {
@@ -65,6 +73,8 @@ export default function TransactionForm({
         date: initialValue.date,
         category_id: initialValue.category_id ?? '',
         account_id: initialValue.account_id,
+        isInstallment: false,
+        installments: '',
       })
     } else {
       setForm(
@@ -90,6 +100,10 @@ export default function TransactionForm({
       setError('Informe um valor válido maior que zero.')
       return
     }
+    if (amountNumber > MAX_AMOUNT) {
+      setError(`Informe um valor menor que ${MAX_AMOUNT.toLocaleString('pt-BR')}.`)
+      return
+    }
     if (!form.date) {
       setError('Informe a data.')
       return
@@ -99,22 +113,58 @@ export default function TransactionForm({
       return
     }
 
-    setSubmitting(true)
-    try {
-      await onSubmit({
-        description: form.description.trim(),
-        amount: amountNumber,
-        type: form.type,
-        date: form.date,
-        category_id: form.category_id === '' ? null : Number(form.category_id),
-        account_id: form.account_id,
-      })
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Não foi possível salvar o lançamento.',
-      )
-    } finally {
-      setSubmitting(false)
+    if (form.isInstallment) {
+      if (!form.installments || Number(form.installments) < 1 || Number(form.installments) > 420) {
+        setError('Número de parcelas deve estar entre 1 e 420.')
+        return
+      }
+
+      setSubmitting(true)
+      try {
+        await createInstallmentTransaction({
+          account_id: form.account_id,
+          category_id: form.category_id === '' ? null : Number(form.category_id),
+          description: form.description.trim(),
+          total_amount: amountNumber,
+          installments: Number(form.installments),
+          type: form.type,
+          first_date: form.date,
+        })
+        // Refresh the list by calling the parent's onSubmit with a dummy payload
+        // The backend returns all created transactions, but we just refresh from the parent
+        await onSubmit({
+          description: form.description.trim(),
+          amount: amountNumber,
+          type: form.type,
+          date: form.date,
+          category_id: form.category_id === '' ? null : Number(form.category_id),
+          account_id: form.account_id,
+        })
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : 'Não foi possível criar as parcelas.',
+        )
+      } finally {
+        setSubmitting(false)
+      }
+    } else {
+      setSubmitting(true)
+      try {
+        await onSubmit({
+          description: form.description.trim(),
+          amount: amountNumber,
+          type: form.type,
+          date: form.date,
+          category_id: form.category_id === '' ? null : Number(form.category_id),
+          account_id: form.account_id,
+        })
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : 'Não foi possível salvar o lançamento.',
+        )
+      } finally {
+        setSubmitting(false)
+      }
     }
   }
 
@@ -158,7 +208,7 @@ export default function TransactionForm({
 
           <Box sx={{ display: 'flex', gap: 2 }}>
             <TextField
-              label="Valor"
+              label={form.isInstallment ? 'Valor total' : 'Valor'}
               value={form.amount}
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, amount: e.target.value }))
@@ -166,6 +216,15 @@ export default function TransactionForm({
               fullWidth
               inputMode="decimal"
               placeholder="0,00"
+              slotProps={{
+                input: {
+                  inputProps: {
+                    max: MAX_AMOUNT,
+                    min: 0.01,
+                    step: 0.01,
+                  },
+                },
+              }}
             />
             <TextField
               label="Data"
@@ -175,7 +234,15 @@ export default function TransactionForm({
                 setForm((prev) => ({ ...prev, date: e.target.value }))
               }
               fullWidth
-              slotProps={{ inputLabel: { shrink: true } }}
+              slotProps={{
+                inputLabel: { shrink: true },
+                input: {
+                  inputProps: {
+                    min: dateGuardrails.min,
+                    max: dateGuardrails.max,
+                  },
+                },
+              }}
             />
           </Box>
 
@@ -231,6 +298,48 @@ export default function TransactionForm({
               </MenuItem>
             ))}
           </TextField>
+
+          {form.type === 'expense' && (
+            <>
+              <FormControlLabel
+                control={
+                  <input
+                    type="checkbox"
+                    checked={form.isInstallment}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        isInstallment: e.target.checked,
+                        installments: e.target.checked ? '' : '',
+                      }))
+                    }
+                  />
+                }
+                label="Compra parcelada"
+              />
+
+              {form.isInstallment && (
+                <TextField
+                  label="Número de parcelas"
+                  type="number"
+                  value={form.installments}
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, installments: e.target.value }))
+                  }
+                  fullWidth
+                  slotProps={{
+                    input: {
+                      inputProps: {
+                        min: 1,
+                        max: 420,
+                      },
+                    },
+                  }}
+                  placeholder="1"
+                />
+              )}
+            </>
+          )}
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>

@@ -5,11 +5,15 @@ import CssBaseline from '@mui/material/CssBaseline'
 import { ThemeProvider } from '@mui/material/styles'
 import './index.css'
 import App from './App.tsx'
-import theme from './theme.ts'
+import { ThemeModeProvider, useThemeMode } from './context/ThemeModeContext.tsx'
+import { getTheme } from './theme.ts'
 import { AuthProvider } from './context/AuthContext.tsx'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
+export function ThemedApp() {
+  const { resolvedMode } = useThemeMode()
+  const theme = getTheme(resolvedMode)
+
+  return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <BrowserRouter>
@@ -18,5 +22,13 @@ createRoot(document.getElementById('root')!).render(
         </AuthProvider>
       </BrowserRouter>
     </ThemeProvider>
+  )
+}
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <ThemeModeProvider>
+      <ThemedApp />
+    </ThemeModeProvider>
   </StrictMode>,
 )

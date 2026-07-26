@@ -10,7 +10,7 @@ from app import auth, crud
 
 @pytest.fixture()
 def user_a(client, db_session):
-    crud.create_user(db_session, username="alice", password_hash=auth.hash_password("alicepass123"))
+    crud.create_user(db_session, username="alice", name="Alice", password_hash=auth.hash_password("alicepass123"))
     response = client.post("/api/auth/login", json={"username": "alice", "password": "alicepass123"})
     assert response.status_code == 200
     headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
@@ -47,7 +47,7 @@ def user_a(client, db_session):
 
 @pytest.fixture()
 def user_b(client, db_session):
-    crud.create_user(db_session, username="bob", password_hash=auth.hash_password("bobpass123"))
+    crud.create_user(db_session, username="bob", name="Bob", password_hash=auth.hash_password("bobpass123"))
     response = client.post("/api/auth/login", json={"username": "bob", "password": "bobpass123"})
     assert response.status_code == 200
     headers = {"Authorization": f"Bearer {response.json()['access_token']}"}

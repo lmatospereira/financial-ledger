@@ -2,6 +2,8 @@ import { useState } from 'react'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
+import CreditCardIcon from '@mui/icons-material/CreditCard'
+import RepeatIcon from '@mui/icons-material/Repeat'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import {
   Box,
@@ -18,6 +20,7 @@ import {
   ListItem,
   ListItemText,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import type { Transaction } from '../api/types'
@@ -127,6 +130,36 @@ export default function TransactionList({
                     sx={{ mr: 1, flexShrink: 0 }}
                   />
                 )}
+                {transaction.recurring_transaction_id && (
+                  <Tooltip title="Gerado por regra recorrente">
+                    <RepeatIcon
+                      fontSize="small"
+                      color="action"
+                      sx={{ mr: 1, flexShrink: 0 }}
+                    />
+                  </Tooltip>
+                )}
+                {transaction.installment_number && transaction.installment_total && (
+                  <Tooltip title={`Parcela ${transaction.installment_number} de ${transaction.installment_total}`}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 0.25,
+                        mr: 1,
+                        flexShrink: 0,
+                      }}
+                    >
+                      <CreditCardIcon
+                        fontSize="small"
+                        color="action"
+                      />
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+                        {transaction.installment_number}/{transaction.installment_total}
+                      </Typography>
+                    </Box>
+                  </Tooltip>
+                )}
                 <ListItemText
                   primary={transaction.description || 'Transferência'}
                   secondary={
@@ -142,7 +175,7 @@ export default function TransactionList({
                         sx={{
                           mt: 0.5,
                           bgcolor: transaction.category.color,
-                          color: '#fff',
+                          color: 'white',
                           height: 20,
                           fontSize: 11,
                         }}
@@ -159,7 +192,7 @@ export default function TransactionList({
                         ? 'success.main'
                         : 'error.main'
                   }
-                  sx={{ fontWeight: 600, mr: 6, whiteSpace: 'nowrap' }}
+                  sx={{ fontWeight: 600, mr: 6, whiteSpace: 'nowrap', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}
                 >
                   {isTransfer ? '⇄ ' : transaction.type === 'income' ? '+ ' : '− '}
                   {currencyFormatter.format(transaction.amount)}

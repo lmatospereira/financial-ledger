@@ -173,7 +173,7 @@ export default function Dashboard() {
                 onClick={() => setActiveCategoryId(category.id)}
                 sx={{
                   bgcolor: activeCategoryId === category.id ? category.color : undefined,
-                  color: activeCategoryId === category.id ? '#fff' : undefined,
+                  color: activeCategoryId === category.id ? 'white' : undefined,
                   borderColor: category.color,
                 }}
                 variant={activeCategoryId === category.id ? 'filled' : 'outlined'}

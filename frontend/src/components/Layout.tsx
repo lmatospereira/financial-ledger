@@ -4,6 +4,8 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
 import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined'
 import LogoutIcon from '@mui/icons-material/Logout'
 import PersonOutlineIcon from '@mui/icons-material/PersonOutlineOutlined'
+import LightModeIcon from '@mui/icons-material/LightMode'
+import DarkModeIcon from '@mui/icons-material/DarkMode'
 import {
   AppBar,
   Avatar,
@@ -22,6 +24,7 @@ import {
 } from '@mui/material'
 import ChangePasswordDialog from './ChangePasswordDialog'
 import { useAuth } from '../context/authContext'
+import { useThemeMode } from '../context/ThemeModeContext'
 
 interface LayoutProps {
   children: ReactNode
@@ -36,6 +39,7 @@ export default function Layout({ children }: LayoutProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const { signOut, currentUser } = useAuth()
+  const { resolvedMode, setMode } = useThemeMode()
 
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
@@ -46,10 +50,21 @@ export default function Layout({ children }: LayoutProps) {
     navigate('/login', { replace: true })
   }
 
+  const handleThemeToggle = () => {
+    if (resolvedMode === 'light') {
+      setMode('dark')
+    } else {
+      setMode('light')
+    }
+  }
+
   const navItems: NavItem[] = [
     { label: 'Lançamentos', path: '/' },
     { label: 'Contas', path: '/accounts' },
     { label: 'Categorias', path: '/categories' },
+    { label: 'Orçamento', path: '/budgets' },
+    { label: 'Recorrentes', path: '/recurring' },
+    { label: 'Contas a Pagar', path: '/bills' },
     { label: 'Relatórios', path: '/reports' },
     ...(currentUser?.is_admin ? [{ label: 'Usuários', path: '/users' }] : []),
   ]
@@ -107,6 +122,18 @@ export default function Layout({ children }: LayoutProps) {
               </Box>
             )}
             <Divider />
+            <MenuItem onClick={handleThemeToggle}>
+              <ListItemIcon>
+                {resolvedMode === 'light' ? (
+                  <DarkModeIcon fontSize="small" />
+                ) : (
+                  <LightModeIcon fontSize="small" />
+                )}
+              </ListItemIcon>
+              <ListItemText>
+                {resolvedMode === 'light' ? 'Modo escuro' : 'Modo claro'}
+              </ListItemText>
+            </MenuItem>
             <MenuItem
               onClick={() => {
                 setMenuAnchor(null)
