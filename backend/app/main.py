@@ -13,9 +13,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app import auth, crud
 from app.database import Base, SessionLocal, engine
+from app.limiter import limiter
 from app.routers import accounts as accounts_router
 from app.routers import auth as auth_router
 from app.routers import bills as bills_router
@@ -36,6 +39,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Livro Caixa API", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
 
 # CORS: allow the frontend dev server (and any origins configured via env)
 # to call the API. Tighten/override CORS_ORIGINS in production.
@@ -75,6 +80,15 @@ async def request_validation_exception_handler(
         messages.append(f"{loc}: {msg}" if loc else msg)
     detail = "; ".join(messages) if messages else "Invalid request"
     return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, content={"detail": detail})
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exception_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    """Handle rate limit exceeded errors with a consistent error shape."""
+    return JSONResponse(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        content={"detail": "Rate limit exceeded. Please try again later."},
+    )
 
 
 def _seed_admin_user() -> None:
