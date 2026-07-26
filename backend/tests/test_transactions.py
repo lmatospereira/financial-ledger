@@ -1,3 +1,5 @@
+from datetime import date, timedelta
+
 import pytest
 
 
@@ -521,39 +523,51 @@ def test_create_bill_amount_at_max_accepted(client, auth_headers):
 
 
 # ---------- Guardrails: Date range limits ----------
+# These four mirror _validate_date_range's own boundary computation
+# (today.replace(year=today.year +/- 3)) exactly, rather than hardcoding
+# absolute dates -- hardcoded dates silently drift out of sync with "today"
+# and start failing (or worse, false-passing) the day after they're written.
 def test_create_transaction_date_far_future_rejected(client, auth_headers, income_category, default_account):
+    today = date.today()
+    max_date = today.replace(year=today.year + 3)
     response = make_transaction(
-        client, auth_headers, income_category["id"], default_account["id"], date="2029-07-26"
+        client,
+        auth_headers,
+        income_category["id"],
+        default_account["id"],
+        date=(max_date + timedelta(days=1)).isoformat(),
     )
-    # Today is 2026-07-25, so 2029-07-26 is beyond the 3-year boundary
     assert response.status_code == 422
 
 
 def test_create_transaction_date_far_past_rejected(client, auth_headers, income_category, default_account):
+    today = date.today()
+    min_date = today.replace(year=today.year - 3)
     response = make_transaction(
-        client, auth_headers, income_category["id"], default_account["id"], date="2023-07-24"
+        client,
+        auth_headers,
+        income_category["id"],
+        default_account["id"],
+        date=(min_date - timedelta(days=1)).isoformat(),
     )
-    # Today is 2026-07-25, so 2023-07-24 is beyond the 3-year boundary in the past
     assert response.status_code == 422
 
 
 def test_create_transaction_date_at_3_year_boundary_future_accepted(client, auth_headers, income_category, default_account):
+    today = date.today()
+    max_date = today.replace(year=today.year + 3)
     response = make_transaction(
-        client, auth_headers, income_category["id"], default_account["id"], date="2029-07-25"
+        client, auth_headers, income_category["id"], default_account["id"], date=max_date.isoformat()
     )
-    # Today is 2026-07-25, so 2029-07-25 is exactly 3 years in the future
-    # The guardrail is today.replace(year=today.year + 3), which is 2029-07-25
-    # So this should be accepted
     assert response.status_code == 201
 
 
 def test_create_transaction_date_at_3_year_boundary_past_accepted(client, auth_headers, income_category, default_account):
+    today = date.today()
+    min_date = today.replace(year=today.year - 3)
     response = make_transaction(
-        client, auth_headers, income_category["id"], default_account["id"], date="2023-07-25"
+        client, auth_headers, income_category["id"], default_account["id"], date=min_date.isoformat()
     )
-    # Today is 2026-07-25, so 2023-07-25 is exactly 3 years in the past
-    # The guardrail is today.replace(year=today.year - 3), which is 2023-07-25
-    # So this should be accepted
     assert response.status_code == 201
 
 
