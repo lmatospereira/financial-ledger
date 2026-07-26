@@ -1,6 +1,8 @@
 """Isolated test DB fixture: a fresh in-memory SQLite DB per test, with the
 FastAPI app's get_db dependency overridden to use it. Also provides a
 pre-seeded admin user and a client authenticated as that user.
+
+Rate limiter state is reset before each test to prevent test interference.
 """
 import pytest
 from fastapi.testclient import TestClient
@@ -10,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from app import auth, crud
 from app.database import Base, get_db
+from app.limiter import limiter
 from app.main import app
 
 TEST_USERNAME = "admin"
@@ -32,6 +35,17 @@ def db_session():
     finally:
         session.close()
         Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture(autouse=True)
+def reset_limiter():
+    """Reset the rate limiter's in-memory storage before each test to prevent
+    test interference. The limiter uses slowapi's default in-memory storage,
+    which persists across test invocations unless explicitly cleared.
+    """
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 @pytest.fixture()
