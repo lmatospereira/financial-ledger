@@ -62,7 +62,20 @@ jobs:
         id: bump
         run: |
           set -euo pipefail
-          current=$(tr -d '[:space:]' < VERSION)
+          # Source of truth is the highest existing git tag, not develop's
+          # own VERSION file: the file only gets updated once the
+          # post-release main->develop sync PR merges, so cutting a release
+          # before that sync lands re-bumps from a stale value and produces
+          # a version that collides with one already tagged (this happened
+          # in practice: two releases both computed "0.1.4"). Tags are
+          # updated atomically at tag-creation time, so they can't drift.
+          git fetch origin --tags
+          latest_tag=$(git tag -l 'v*' | sed 's/^v//' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+          if [ -n "$latest_tag" ]; then
+            current="$latest_tag"
+          else
+            current=$(tr -d '[:space:]' < VERSION)
+          fi
           IFS='.' read -r major minor patch <<< "$current"
           new_patch=$((patch + 1))
           new_version="${major}.${minor}.${new_patch}"
