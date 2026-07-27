@@ -110,8 +110,8 @@ export default function Users() {
       setFormError('Informe o nome.')
       return
     }
-    if (!editing && form.password.length < 6) {
-      setFormError('A senha deve ter pelo menos 6 caracteres.')
+    if (!editing && form.password.length < 8) {
+      setFormError('A senha deve ter pelo menos 8 caracteres.')
       return
     }
 

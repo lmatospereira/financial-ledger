@@ -1,16 +1,18 @@
 """POST /api/auth/login, GET /api/auth/me"""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app import auth, crud, models, schemas
 from app.auth import get_current_user
 from app.database import get_db
+from app.limiter import limiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 @router.post("/login", response_model=schemas.Token)
-def login(credentials: schemas.LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(request: Request, credentials: schemas.LoginRequest, db: Session = Depends(get_db)):
     user = crud.get_user_by_username(db, credentials.username)
     if user is None or not auth.verify_password(credentials.password, user.password_hash):
         raise HTTPException(

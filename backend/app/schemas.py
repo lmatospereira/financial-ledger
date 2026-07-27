@@ -60,7 +60,7 @@ class UserOut(BaseModel):
 class UserCreate(BaseModel):
     username: str
     name: str
-    password: str
+    password: str = Field(min_length=8)
     is_admin: bool = False
 
     _normalize_username = field_validator("username")(_normalize_username)
@@ -76,7 +76,7 @@ class UserUpdate(BaseModel):
 
 class PasswordChange(BaseModel):
     current_password: str
-    new_password: str
+    new_password: str = Field(min_length=8)
 
 
 # ---------- Account ----------

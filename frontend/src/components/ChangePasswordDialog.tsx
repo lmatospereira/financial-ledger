@@ -46,8 +46,8 @@ export default function ChangePasswordDialog({
       setError('Informe sua senha atual.')
       return
     }
-    if (!form.new_password || form.new_password.length < 6) {
-      setError('A nova senha deve ter pelo menos 6 caracteres.')
+    if (!form.new_password || form.new_password.length < 8) {
+      setError('A nova senha deve ter pelo menos 8 caracteres.')
       return
     }
     if (form.new_password !== form.confirm_password) {

@@ -1,12 +1,13 @@
 """GET/POST/PUT/DELETE /api/users (admin only), PUT /api/users/me/password
 (any authenticated user).
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app import auth, crud, models, schemas
 from app.auth import get_current_admin_user, get_current_user
 from app.database import get_db
+from app.limiter import limiter
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -19,7 +20,9 @@ def list_users(
 
 
 @router.post("", response_model=schemas.UserOut, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
 def create_user(
+    request: Request,
     user: schemas.UserCreate,
     current_user: models.User = Depends(get_current_admin_user),
     db: Session = Depends(get_db),
@@ -36,7 +39,9 @@ def create_user(
 
 
 @router.put("/me/password", response_model=schemas.UserOut)
+@limiter.limit("5/minute")
 def change_password(
+    request: Request,
     payload: schemas.PasswordChange,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
