@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import {
@@ -59,6 +59,8 @@ export default function MonthSelector({
   const theme = useTheme()
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
   const [popoverYear, setPopoverYear] = useState(year)
+  const touchStartX = useRef(0)
+  const touchStartY = useRef(0)
 
   const goToPrevious = () => {
     if (month === 1) {
@@ -104,13 +106,59 @@ export default function MonthSelector({
     setPopoverYear(popoverYear + 1)
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault()
+      goToPrevious()
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault()
+      goToNext()
+    }
+  }
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const touchEndX = e.changedTouches[0].clientX
+    const touchEndY = e.changedTouches[0].clientY
+    const deltaX = touchEndX - touchStartX.current
+    const deltaY = touchEndY - touchStartY.current
+
+    // Only trigger swipe if horizontal movement is greater than vertical
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
+      if (deltaX < 0) {
+        // Swipe left → next month
+        goToNext()
+      } else {
+        // Swipe right → previous month
+        goToPrevious()
+      }
+    }
+  }
+
   const open = Boolean(anchorEl)
 
   return (
     <Stack
       direction="row"
       spacing={1}
-      sx={{ alignItems: 'center', justifyContent: 'center' }}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      sx={{
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 1,
+        outline: 'none',
+        '&:focus-visible': {
+          outline: `2px solid ${theme.palette.primary.main}`,
+          outlineOffset: 2,
+        },
+      }}
     >
       <IconButton aria-label="Mês anterior" onClick={goToPrevious}>
         <ChevronLeftIcon />
