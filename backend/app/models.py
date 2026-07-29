@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models: User, Account, Category, Transaction, Budget, RecurringTransaction, Bill."""
+"""SQLAlchemy ORM models: User, Account, Category, Transaction, Budget, RecurringTransaction, Bill, Goal."""
 from datetime import date, datetime, timezone
 
 from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, String, UniqueConstraint
@@ -133,6 +133,21 @@ class Bill(Base):
     paid_transaction_id: Mapped[int | None] = mapped_column(
         ForeignKey("transactions.id"), nullable=True
     )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+
+class Goal(Base):
+    __tablename__ = "goals"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), nullable=False)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    target_amount: Mapped[float] = mapped_column(Float, nullable=False)
+    target_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    color: Mapped[str] = mapped_column(String, nullable=False)  # hex color, e.g. "#FF0000"
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )

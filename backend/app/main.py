@@ -20,10 +20,12 @@ from app import auth, crud
 from app.database import Base, SessionLocal, engine
 from app.limiter import limiter
 from app.routers import accounts as accounts_router
+from app.routers import alerts as alerts_router
 from app.routers import auth as auth_router
 from app.routers import bills as bills_router
 from app.routers import budgets as budgets_router
 from app.routers import categories as categories_router
+from app.routers import goals as goals_router
 from app.routers import recurring_transactions as recurring_transactions_router
 from app.routers import reports as reports_router
 from app.routers import transactions as transactions_router
@@ -62,6 +64,8 @@ app.include_router(transactions_router.router)
 app.include_router(recurring_transactions_router.router)
 app.include_router(transfers_router.router)
 app.include_router(bills_router.router)
+app.include_router(goals_router.router)
+app.include_router(alerts_router.router)
 app.include_router(reports_router.router)
 
 

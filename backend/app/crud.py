@@ -66,6 +66,7 @@ def delete_user(db: Session, db_user: models.User) -> None:
     # relationship-based cascade configuration).
     db.query(models.Bill).filter(models.Bill.user_id == db_user.id).delete()
     db.query(models.Budget).filter(models.Budget.user_id == db_user.id).delete()
+    db.query(models.Goal).filter(models.Goal.user_id == db_user.id).delete()
     db.query(models.RecurringTransaction).filter(models.RecurringTransaction.user_id == db_user.id).delete()
     db.query(models.Transaction).filter(models.Transaction.user_id == db_user.id).delete()
     db.query(models.Account).filter(models.Account.user_id == db_user.id).delete()
@@ -699,4 +700,43 @@ def update_bill(db: Session, db_bill: models.Bill, bill: schemas.BillUpdate) -> 
 
 def delete_bill(db: Session, db_bill: models.Bill) -> None:
     db.delete(db_bill)
+    db.commit()
+
+
+# ---------- Goal ----------
+def get_goals(db: Session, user_id: int) -> list[models.Goal]:
+    return (
+        db.query(models.Goal)
+        .filter(models.Goal.user_id == user_id)
+        .order_by(models.Goal.created_at)
+        .all()
+    )
+
+
+def get_goal(db: Session, goal_id: int, user_id: int) -> models.Goal | None:
+    return (
+        db.query(models.Goal)
+        .filter(models.Goal.id == goal_id, models.Goal.user_id == user_id)
+        .first()
+    )
+
+
+def create_goal(db: Session, user_id: int, goal: schemas.GoalCreate) -> models.Goal:
+    db_goal = models.Goal(**goal.model_dump(), user_id=user_id)
+    db.add(db_goal)
+    db.commit()
+    db.refresh(db_goal)
+    return db_goal
+
+
+def update_goal(db: Session, db_goal: models.Goal, goal: schemas.GoalUpdate) -> models.Goal:
+    for field, value in goal.model_dump(exclude_none=True).items():
+        setattr(db_goal, field, value)
+    db.commit()
+    db.refresh(db_goal)
+    return db_goal
+
+
+def delete_goal(db: Session, db_goal: models.Goal) -> None:
+    db.delete(db_goal)
     db.commit()
