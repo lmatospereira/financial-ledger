@@ -320,3 +320,60 @@ class InstallmentCreate(BaseModel):
     first_date: date
 
     _validate_first_date = field_validator("first_date")(_validate_date_range)
+
+
+# ---------- Goal ----------
+class GoalBase(BaseModel):
+    name: str
+    target_amount: float = Field(gt=0, le=MAX_AMOUNT)
+    account_id: int
+    target_date: Optional[date] = None
+    color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+
+    _validate_target_date = field_validator("target_date")(
+        lambda cls, v: _validate_date_range(v) if v is not None else v
+    )
+
+
+class GoalCreate(GoalBase):
+    pass
+
+
+class GoalUpdate(BaseModel):
+    name: Optional[str] = None
+    target_amount: Optional[float] = Field(default=None, gt=0, le=MAX_AMOUNT)
+    account_id: Optional[int] = None
+    target_date: Optional[date] = None
+    color: Optional[str] = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+
+    _validate_target_date = field_validator("target_date")(
+        lambda cls, v: _validate_date_range(v) if v is not None else v
+    )
+
+
+class GoalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    target_amount: float
+    target_date: Optional[date] = None
+    color: str
+    created_at: datetime
+    account: Optional[AccountRef] = None
+    current_amount: float
+    progress_percent: float
+
+
+# ---------- Alerts ----------
+class UpcomingAlertOut(BaseModel):
+    """Unified alert for bills, recurring transactions, and installments."""
+
+    kind: Literal["bill", "recurring", "installment"]
+    id: int
+    description: str
+    amount: float
+    due_date: date
+    is_overdue: bool
+    account: Optional[AccountRef] = None
+    category: Optional[CategoryOut] = None
