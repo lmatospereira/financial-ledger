@@ -1,4 +1,6 @@
 """Tests for alerts: upcoming bills, recurring transactions, and installments."""
+from datetime import date
+
 import pytest
 
 
@@ -138,6 +140,39 @@ def test_alerts_recurring_transactions(client, auth_headers, default_account):
     assert recurring_alerts[0]["id"] == recurring["id"]
     assert recurring_alerts[0]["description"] == "Monthly Rent"
     assert recurring_alerts[0]["amount"] == 1000.0
+
+
+def test_alerts_recurring_due_today_not_skipped(client, auth_headers, default_account):
+    """A recurring rule whose day_of_month is today must surface today, not next month.
+
+    Regression test for an off-by-one in the this-month/next-month boundary
+    check (was `today.day >= day_of_month`, which incorrectly treated "today"
+    as already passed and jumped to next month).
+    """
+    today = date.today()
+    response = client.post(
+        "/api/recurring-transactions",
+        json={
+            "account_id": default_account["id"],
+            "category_id": None,
+            "description": "Due Today Subscription",
+            "amount": 25.0,
+            "type": "expense",
+            "day_of_month": today.day,
+            "start_date": today.replace(year=today.year - 1).isoformat(),
+            "end_date": None,
+        },
+        headers=auth_headers,
+    )
+    assert response.status_code == 201, f"Failed to create recurring: {response.text}"
+    recurring = response.json()
+
+    response = client.get("/api/alerts/upcoming?days=1", headers=auth_headers)
+    assert response.status_code == 200
+    alerts = response.json()
+    recurring_alerts = [a for a in alerts if a["kind"] == "recurring" and a["id"] == recurring["id"]]
+    assert len(recurring_alerts) == 1
+    assert recurring_alerts[0]["due_date"] == today.isoformat()
 
 
 def test_alerts_recurring_month_end_clamping(client, auth_headers, default_account):

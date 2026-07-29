@@ -30,8 +30,10 @@ def _compute_next_recurring_date(
     Clamps to the month's last day if day_of_month exceeds it (e.g., day 31 in Feb).
     Returns None if the computed date falls outside the rule's active period.
     """
-    # If we've already passed this month's occurrence, move to next month
-    if today.day >= rt.day_of_month:
+    # If we've already passed this month's occurrence, move to next month.
+    # Using > (not >=) so a rule whose day_of_month is today still surfaces
+    # today's occurrence instead of skipping straight to next month.
+    if today.day > rt.day_of_month:
         # Next month
         if today.month == 12:
             next_month = today.replace(year=today.year + 1, month=1)
