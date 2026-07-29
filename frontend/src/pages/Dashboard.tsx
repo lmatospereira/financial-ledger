@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import AddIcon from '@mui/icons-material/Add'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
+import RepeatIcon from '@mui/icons-material/Repeat'
+import CreditCardIcon from '@mui/icons-material/CreditCard'
 import {
   Alert,
   Box,
@@ -9,6 +12,10 @@ import {
   Chip,
   CircularProgress,
   Fab,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
   MenuItem,
   Stack,
   TextField,
@@ -26,15 +33,47 @@ import {
   getAccounts,
   getApiErrorMessage,
   getCategories,
+  getUpcomingAlerts,
   getSummary,
   getTransactions,
   updateTransaction,
 } from '../api/client'
-import type { Account, Category, Summary, Transaction, TransactionInput } from '../api/types'
+import type { Account, Category, Summary, Transaction, TransactionInput, UpcomingAlert } from '../api/types'
 
 function currentPeriod(): { month: number; year: number } {
   const now = new Date()
   return { month: now.getMonth() + 1, year: now.getFullYear() }
+}
+
+const currencyFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+})
+
+function getDaysUntilDue(dueDate: string): number {
+  const due = new Date(dueDate)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  due.setHours(0, 0, 0, 0)
+  return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+function formatRelativeDueDate(daysUntilDue: number): string {
+  if (daysUntilDue < 0) return `Atrasado ${Math.abs(daysUntilDue)} dias`
+  if (daysUntilDue === 0) return 'Hoje'
+  if (daysUntilDue === 1) return 'Amanhã'
+  return `em ${daysUntilDue} dias`
+}
+
+function getAlertKindIcon(kind: 'bill' | 'recurring' | 'installment') {
+  switch (kind) {
+    case 'bill':
+      return <ReceiptLongOutlinedIcon fontSize="small" />
+    case 'recurring':
+      return <RepeatIcon fontSize="small" />
+    case 'installment':
+      return <CreditCardIcon fontSize="small" />
+  }
 }
 
 export default function Dashboard() {
@@ -44,6 +83,7 @@ export default function Dashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
+  const [upcomingAlerts, setUpcomingAlerts] = useState<UpcomingAlert[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -59,17 +99,19 @@ export default function Dashboard() {
     setError(null)
     try {
       const accountId = accountFilter === '' ? undefined : accountFilter
-      const [transactionsData, categoriesData, summaryData, accountsData] =
+      const [transactionsData, categoriesData, summaryData, accountsData, alertsData] =
         await Promise.all([
           getTransactions(month, year, accountId),
           getCategories(),
           getSummary(month, year, accountId),
           getAccounts(),
+          getUpcomingAlerts(7),
         ])
       setTransactions(transactionsData)
       setCategories(categoriesData)
       setSummary(summaryData)
       setAccounts(accountsData)
+      setUpcomingAlerts(alertsData)
     } catch (err) {
       setError(getApiErrorMessage(err))
     } finally {
@@ -123,6 +165,89 @@ export default function Dashboard() {
         {error && <Alert severity="error">{error}</Alert>}
 
         <BalanceCard summary={summary} loading={loading} />
+
+        {upcomingAlerts.length > 0 && (
+          <Card>
+            <Box sx={{ px: 2, pt: 2 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                Próximos vencimentos (7 dias)
+              </Typography>
+            </Box>
+            <List disablePadding>
+              {upcomingAlerts.slice(0, 5).map((alert) => {
+                const daysUntilDue = getDaysUntilDue(alert.due_date)
+                return (
+                  <ListItem
+                    key={`${alert.kind}-${alert.id}`}
+                    sx={{
+                      py: 1.5,
+                      px: 2,
+                      borderTop: '1px solid',
+                      borderColor: 'divider',
+                      '&:first-of-type': {
+                        borderTop: 'none',
+                      },
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      <Box
+                        sx={{
+                          color: alert.is_overdue ? 'error.main' : 'text.secondary',
+                        }}
+                      >
+                        {getAlertKindIcon(alert.kind)}
+                      </Box>
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={alert.description}
+                      secondary={
+                        <Stack spacing={0.5} direction="row" sx={{ alignItems: 'center', mt: 0.5 }}>
+                          <Chip
+                            label={formatRelativeDueDate(daysUntilDue)}
+                            size="small"
+                            variant="outlined"
+                            color={alert.is_overdue ? 'error' : 'default'}
+                            sx={{ height: 20, fontSize: 11 }}
+                          />
+                          {alert.account && (
+                            <Chip
+                              label={alert.account.name}
+                              size="small"
+                              sx={{
+                                bgcolor: alert.account.color,
+                                color: 'white',
+                                height: 20,
+                                fontSize: 11,
+                              }}
+                            />
+                          )}
+                        </Stack>
+                      }
+                    />
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: 600,
+                        color: alert.is_overdue ? 'error.main' : 'text.primary',
+                        minWidth: 'fit-content',
+                        ml: 2,
+                      }}
+                    >
+                      {currencyFormatter.format(alert.amount)}
+                    </Typography>
+                  </ListItem>
+                )
+              })}
+            </List>
+            {upcomingAlerts.length > 5 && (
+              <Box sx={{ px: 2, py: 1, textAlign: 'center', borderTop: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="caption" color="text.secondary">
+                  +{upcomingAlerts.length - 5} outros vencimentos
+                </Typography>
+              </Box>
+            )}
+          </Card>
+        )}
 
         <Stack
           direction={{ xs: 'column', sm: 'row' }}

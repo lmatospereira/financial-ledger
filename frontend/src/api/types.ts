@@ -206,3 +206,36 @@ export type BillInput = Omit<Bill, 'id' | 'paid' | 'paid_transaction_id' | 'crea
 export interface BillPayRequest {
   account_id: number
 }
+
+// ---------- Upcoming Alerts ----------
+export interface UpcomingAlert {
+  kind: 'bill' | 'recurring' | 'installment'
+  id: number
+  description: string
+  amount: number
+  due_date: string // ISO date
+  is_overdue: boolean
+  account: AccountRef | null
+  category: Category | null
+}
+
+// ---------- Goals ----------
+export interface Goal {
+  id: number
+  name: string
+  target_amount: number
+  target_date: string | null // ISO date
+  color: string
+  created_at: string
+  account: AccountRef | null
+  current_amount: number
+  progress_percent: number
+}
+
+export type GoalInput = {
+  name: string
+  target_amount: number
+  account_id: number
+  target_date: string | null
+  color: string
+}

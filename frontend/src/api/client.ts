@@ -14,6 +14,8 @@ import type {
   CategoryInput,
   ChangePasswordRequest,
   CurrentUser,
+  Goal,
+  GoalInput,
   LoginRequest,
   LoginResponse,
   MonthlyTrendEntry,
@@ -25,6 +27,7 @@ import type {
   TransactionInput,
   TransactionType,
   TransferInput,
+  UpcomingAlert,
   UserInput,
   UserUpdateInput,
 } from './types'
@@ -315,6 +318,32 @@ export async function deleteBill(id: number): Promise<void> {
 export async function payBill(id: number, payload: BillPayRequest): Promise<Bill> {
   const { data } = await api.post<Bill>(`/bills/${id}/pay`, payload)
   return data
+}
+
+export async function getUpcomingAlerts(days?: number): Promise<UpcomingAlert[]> {
+  const { data } = await api.get<UpcomingAlert[]>('/alerts/upcoming', {
+    params: days !== undefined ? { days } : {},
+  })
+  return data
+}
+
+export async function getGoals(): Promise<Goal[]> {
+  const { data } = await api.get<Goal[]>('/goals')
+  return data
+}
+
+export async function createGoal(payload: GoalInput): Promise<Goal> {
+  const { data } = await api.post<Goal>('/goals', payload)
+  return data
+}
+
+export async function updateGoal(id: number, payload: Partial<GoalInput>): Promise<Goal> {
+  const { data } = await api.put<Goal>(`/goals/${id}`, payload)
+  return data
+}
+
+export async function deleteGoal(id: number): Promise<void> {
+  await api.delete(`/goals/${id}`)
 }
 
 export function getApiErrorMessage(error: unknown): string {
