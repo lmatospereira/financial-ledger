@@ -7,6 +7,7 @@ import Accounts from './pages/Accounts'
 import Bills from './pages/Bills'
 import Budgets from './pages/Budgets'
 import Categories from './pages/Categories'
+import Goals from './pages/Goals'
 import Recurring from './pages/Recurring'
 import Reports from './pages/Reports'
 import Users from './pages/Users'
@@ -99,6 +100,14 @@ function App() {
         element={
           <RequireAuth>
             <Bills />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/goals"
+        element={
+          <RequireAuth>
+            <Goals />
           </RequireAuth>
         }
       />
