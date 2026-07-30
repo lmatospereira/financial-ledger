@@ -61,3 +61,8 @@ Auditoria da base de código atual (FastAPI + SQLAlchemy/SQLite no backend, Reac
 ## O que NÃO está nesta lista (fora de escopo por ora)
 
 O pedido original incluía um catálogo enorme de módulos novos (cartão de crédito completo, investimentos, metas, importação OFX/CNAB, Open Finance, PIX, OCR, PWA, cobertura de teste de 80%, testes E2E). Isso é realista como **roadmap de meses**, não uma entrega. Não comecei nenhum desses módulos — a auditoria é o passo 1 do próprio processo pedido ("não implemente tudo em um único commit"); os próximos passos precisam ser priorizados com você antes de eu começar a construir.
+
+**Atualização**: metas financeiras e alertas de vencimento já foram implementados e estão em produção (ver `/goals` e o widget de vencimentos no Dashboard). Cartão de crédito como "agregador" (fatura consolidada, independente da conta) está em construção. Seguem fora de escopo por ora:
+
+- **Investimentos / carteira (estilo Investidor10)**: módulo novo — ativos, posições, preço médio, proventos, composição da carteira, evolução no tempo. Escopo grande (semanas, não um pass), não iniciado.
+- **Integração com B3**: não existe API pública gratuita de dados de mercado/carteira pra pessoa física na B3 — na prática isso significa entrada manual sempre, ou consumo de dado de terceiro pago mais adiante (ex: provedores de cotação). Decisão do usuário: começar manual, avaliar API depois.
