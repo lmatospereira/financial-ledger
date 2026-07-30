@@ -71,7 +71,8 @@ export function getTheme(mode: 'light' | 'dark'): Theme {
         styleOverrides: {
           root: {
             borderRadius: 999,
-            paddingX: 3,
+            paddingLeft: 24,
+            paddingRight: 24,
           },
         },
       },
