@@ -7,15 +7,15 @@ export function getTheme(mode: 'light' | 'dark'): Theme {
     palette: {
       mode,
       primary: {
-        main: isLight ? '#4F46E5' : '#818CF8',
-        light: isLight ? '#6366F1' : '#A5B4FC',
-        dark: isLight ? '#4338CA' : '#6366F1',
+        main: isLight ? '#820AD1' : '#C084F5',
+        light: isLight ? '#A040E8' : '#D4A7FF',
+        dark: isLight ? '#6A088D' : '#9D5FD4',
         contrastText: '#FFFFFF',
       },
       secondary: {
-        main: isLight ? '#0D9488' : '#2DD4BF',
-        light: isLight ? '#14B8A6' : '#2DD4BF',
-        contrastText: '#FFFFFF',
+        main: isLight ? '#F5E6FF' : '#3D2255',
+        light: isLight ? '#F5E6FF' : '#5A3878',
+        contrastText: isLight ? '#820AD1' : '#C084F5',
       },
       success: {
         main: isLight ? '#16A34A' : '#4ADE80',
@@ -24,29 +24,29 @@ export function getTheme(mode: 'light' | 'dark'): Theme {
         main: isLight ? '#DC2626' : '#F87171',
       },
       background: {
-        default: isLight ? '#F7F8FC' : '#0F1115',
-        paper: isLight ? '#FFFFFF' : '#171A21',
+        default: isLight ? '#FAFAFA' : '#121016',
+        paper: isLight ? '#FFFFFF' : '#1C1922',
       },
-      divider: isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)',
+      divider: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.08)',
     },
     shape: {
-      borderRadius: 16,
+      borderRadius: 20,
     },
     typography: {
       fontFamily: [
-        'Inter',
+        'Nunito',
         'Roboto',
         '"Helvetica Neue"',
         'Arial',
         'sans-serif',
       ].join(','),
-      h1: { fontWeight: 700 },
-      h2: { fontWeight: 700 },
-      h3: { fontWeight: 700 },
-      h4: { fontWeight: 700 },
-      h5: { fontWeight: 600 },
-      h6: { fontWeight: 600 },
-      button: { textTransform: 'none', fontWeight: 600 },
+      h1: { fontWeight: 800 },
+      h2: { fontWeight: 800 },
+      h3: { fontWeight: 800 },
+      h4: { fontWeight: 800 },
+      h5: { fontWeight: 700 },
+      h6: { fontWeight: 700 },
+      button: { textTransform: 'none', fontWeight: 700 },
     },
     components: {
       MuiPaper: {
@@ -62,7 +62,7 @@ export function getTheme(mode: 'light' | 'dark'): Theme {
           root: {
             border: isLight
               ? '1px solid rgba(0, 0, 0, 0.06)'
-              : 'rgba(255, 255, 255, 0.08)',
+              : '1px solid rgba(255, 255, 255, 0.08)',
             boxShadow: isLight ? '0 1px 3px rgba(0, 0, 0, 0.06)' : 'none',
           },
         },
@@ -70,7 +70,8 @@ export function getTheme(mode: 'light' | 'dark'): Theme {
       MuiButton: {
         styleOverrides: {
           root: {
-            borderRadius: 10,
+            borderRadius: 999,
+            paddingX: 3,
           },
         },
       },
@@ -87,7 +88,8 @@ export function getTheme(mode: 'light' | 'dark'): Theme {
       MuiChip: {
         styleOverrides: {
           root: {
-            fontWeight: 500,
+            fontWeight: 600,
+            borderRadius: 999,
           },
         },
       },
