@@ -344,6 +344,10 @@ export default function Dashboard() {
         defaultAccountId={accountFilter === '' ? null : accountFilter}
         onClose={() => setFormOpen(false)}
         onSubmit={handleFormSubmit}
+        onInstallmentSuccess={async () => {
+          setFormOpen(false)
+          await loadData()
+        }}
       />
 
       <TransferDialog
