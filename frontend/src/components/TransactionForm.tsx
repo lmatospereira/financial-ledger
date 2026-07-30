@@ -27,6 +27,7 @@ interface TransactionFormProps {
   defaultAccountId?: number | null
   onClose: () => void
   onSubmit: (payload: TransactionInput) => Promise<void>
+  onInstallmentSuccess: () => Promise<void>
 }
 
 function todayIso(): string {
@@ -54,6 +55,7 @@ export default function TransactionForm({
   defaultAccountId,
   onClose,
   onSubmit,
+  onInstallmentSuccess,
 }: TransactionFormProps) {
   const [form, setForm] = useState(() => buildEmptyForm(defaultAccountId))
   const [error, setError] = useState<string | null>(null)
@@ -130,16 +132,12 @@ export default function TransactionForm({
           type: form.type,
           first_date: form.date,
         })
-        // Refresh the list by calling the parent's onSubmit with a dummy payload
-        // The backend returns all created transactions, but we just refresh from the parent
-        await onSubmit({
-          description: form.description.trim(),
-          amount: amountNumber,
-          type: form.type,
-          date: form.date,
-          category_id: form.category_id === '' ? null : Number(form.category_id),
-          account_id: form.account_id,
-        })
+        // The backend already created every installment transaction with its
+        // split amount -- just close the dialog and let the parent refresh.
+        // Do NOT call onSubmit here: it creates a real transaction, and doing
+        // so with the full amountNumber duplicated the total on the start
+        // date on top of the already-split installments.
+        await onInstallmentSuccess()
       } catch (err) {
         setError(
           err instanceof Error ? err.message : 'Não foi possível criar as parcelas.',
