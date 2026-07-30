@@ -65,6 +65,7 @@ export default function Layout({ children }: LayoutProps) {
     { label: 'Orçamento', path: '/budgets' },
     { label: 'Recorrentes', path: '/recurring' },
     { label: 'Contas a Pagar', path: '/bills' },
+    { label: 'Cartões', path: '/cards' },
     { label: 'Metas', path: '/goals' },
     { label: 'Relatórios', path: '/reports' },
     ...(currentUser?.is_admin ? [{ label: 'Usuários', path: '/users' }] : []),

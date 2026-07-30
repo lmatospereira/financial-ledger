@@ -46,6 +46,8 @@ const emptyForm: AccountInput = {
   name: '',
   type: 'checking',
   color: PRESET_COLORS[4],
+  closing_day: null,
+  due_day: null,
 }
 
 export default function Accounts() {
@@ -91,7 +93,13 @@ export default function Accounts() {
 
   const openEditForm = (account: Account) => {
     setEditing(account)
-    setForm({ name: account.name, type: account.type, color: account.color })
+    setForm({
+      name: account.name,
+      type: account.type,
+      color: account.color,
+      closing_day: account.closing_day,
+      due_day: account.due_day,
+    })
     setFormError(null)
     setFormOpen(true)
   }
@@ -310,6 +318,52 @@ export default function Accounts() {
                 </MenuItem>
               ))}
             </TextField>
+
+            {form.type === 'credit_card' && (
+              <>
+                <TextField
+                  label="Dia de fechamento (1-31)"
+                  type="number"
+                  value={form.closing_day ?? ''}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      closing_day: e.target.value ? Number(e.target.value) : null,
+                    }))
+                  }
+                  fullWidth
+                  slotProps={{
+                    input: {
+                      inputProps: {
+                        min: 1,
+                        max: 31,
+                      },
+                    },
+                  }}
+                />
+
+                <TextField
+                  label="Dia de vencimento (1-31)"
+                  type="number"
+                  value={form.due_day ?? ''}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      due_day: e.target.value ? Number(e.target.value) : null,
+                    }))
+                  }
+                  fullWidth
+                  slotProps={{
+                    input: {
+                      inputProps: {
+                        min: 1,
+                        max: 31,
+                      },
+                    },
+                  }}
+                />
+              </>
+            )}
 
             <ColorPicker
               value={form.color}

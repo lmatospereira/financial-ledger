@@ -45,6 +45,8 @@ export interface Account {
   name: string
   type: AccountType
   color: string
+  closing_day: number | null
+  due_day: number | null
   created_at: string
   balance: number
 }
@@ -238,4 +240,13 @@ export type GoalInput = {
   account_id: number
   target_date: string | null
   color: string
+}
+
+// ---------- Credit Card Invoice ----------
+export interface CreditCardInvoice {
+  period_start: string // ISO date
+  period_end: string // ISO date
+  due_date: string | null // ISO date
+  total: number
+  transactions: Transaction[]
 }
