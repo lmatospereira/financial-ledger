@@ -13,6 +13,7 @@ import type {
   CategoryBreakdownEntry,
   CategoryInput,
   ChangePasswordRequest,
+  CreditCardInvoice,
   CurrentUser,
   Goal,
   GoalInput,
@@ -344,6 +345,20 @@ export async function updateGoal(id: number, payload: Partial<GoalInput>): Promi
 
 export async function deleteGoal(id: number): Promise<void> {
   await api.delete(`/goals/${id}`)
+}
+
+export async function getCreditCardInvoice(
+  accountId: number,
+  month: number,
+  year: number,
+): Promise<CreditCardInvoice> {
+  const { data } = await api.get<CreditCardInvoice>(
+    `/accounts/${accountId}/invoice`,
+    {
+      params: { month, year },
+    },
+  )
+  return data
 }
 
 export function getApiErrorMessage(error: unknown): string {
