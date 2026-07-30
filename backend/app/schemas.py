@@ -84,6 +84,8 @@ class AccountBase(BaseModel):
     name: str
     type: AccountType
     color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    closing_day: Optional[int] = Field(default=None, ge=1, le=31)
+    due_day: Optional[int] = Field(default=None, ge=1, le=31)
 
 
 class AccountCreate(AccountBase):
@@ -377,3 +379,14 @@ class UpcomingAlertOut(BaseModel):
     is_overdue: bool
     account: Optional[AccountRef] = None
     category: Optional[CategoryOut] = None
+
+
+# ---------- Credit Card Invoice ----------
+class CreditCardInvoiceOut(BaseModel):
+    """Invoice (fatura) for a credit card account within a billing cycle."""
+
+    period_start: date
+    period_end: date
+    due_date: Optional[date] = None
+    total: float
+    transactions: list[TransactionOut]

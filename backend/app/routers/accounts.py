@@ -5,7 +5,7 @@ transactions/transfers touching that account, all-time). Deleting an account
 that still has transactions is blocked with 409 -- the caller must delete or
 reassign those transactions first.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app import crud, models, schemas
@@ -77,3 +77,28 @@ def delete_account(
         )
     crud.delete_account(db, db_account)
     return None
+
+
+@router.get("/{account_id}/invoice", response_model=schemas.CreditCardInvoiceOut)
+def get_credit_card_invoice(
+    account_id: int,
+    month: int = Query(..., ge=1, le=12),
+    year: int = Query(...),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get the credit card invoice (fatura) for a given month and year.
+
+    Only works for accounts with type='credit_card'. Returns 404 if the account
+    doesn't exist, doesn't belong to the current user, or is not a credit card.
+    """
+    db_account = crud.get_account(db, account_id, current_user.id)
+    if db_account is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    if db_account.type != "credit_card":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+
+    invoice = crud.get_credit_card_invoice(db, account_id, current_user.id, month, year)
+    if invoice is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
+    return invoice

@@ -1,5 +1,5 @@
 """Database access helpers used by the routers."""
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from calendar import monthrange
 from uuid import uuid4
 
@@ -740,3 +740,100 @@ def update_goal(db: Session, db_goal: models.Goal, goal: schemas.GoalUpdate) -> 
 def delete_goal(db: Session, db_goal: models.Goal) -> None:
     db.delete(db_goal)
     db.commit()
+
+
+# ---------- Credit Card Invoice ----------
+def get_credit_card_invoice(
+    db: Session, account_id: int, user_id: int, month: int, year: int
+) -> schemas.CreditCardInvoiceOut | None:
+    """Get the credit card invoice for a given month and year.
+
+    Computes the billing cycle window based on the account's closing_day and due_day.
+    If closing_day is not set, falls back to calendar month.
+    Returns None if account doesn't exist or doesn't belong to the user.
+    """
+    account = get_account(db, account_id, user_id)
+    if account is None:
+        return None
+
+    # Calculate the billing cycle window
+    if account.closing_day is not None:
+        # Closing day is set: invoice covers from day after closing_day in previous month
+        # through closing_day in the current month
+        prev_month = month - 1
+        prev_year = year
+        if prev_month < 1:
+            prev_month = 12
+            prev_year = year - 1
+
+        # Get the last day of the previous month
+        _, prev_month_days = monthrange(prev_year, prev_month)
+        # Clamp closing_day to the actual last day of the previous month
+        prev_closing_day = min(account.closing_day, prev_month_days)
+        period_start = date(prev_year, prev_month, prev_closing_day) + timedelta(days=1)
+
+        # Get the last day of the current month
+        _, curr_month_days = monthrange(year, month)
+        # Clamp closing_day to the actual last day of the current month
+        curr_closing_day = min(account.closing_day, curr_month_days)
+        period_end = date(year, month, curr_closing_day)
+    else:
+        # Fallback to calendar month
+        period_start = date(year, month, 1)
+        _, month_days = monthrange(year, month)
+        period_end = date(year, month, month_days)
+
+    # Calculate due date
+    due_date = None
+    if account.due_day is not None:
+        due_month = month + 1
+        due_year = year
+        if due_month > 12:
+            due_month = 1
+            due_year = year + 1
+        _, due_month_days = monthrange(due_year, due_month)
+        due_day = min(account.due_day, due_month_days)
+        due_date = date(due_year, due_month, due_day)
+
+    # Fetch all transactions in the billing period for this account
+    transactions = (
+        db.query(models.Transaction)
+        .filter(
+            models.Transaction.account_id == account_id,
+            models.Transaction.user_id == user_id,
+            models.Transaction.date >= period_start,
+            models.Transaction.date <= period_end,
+        )
+        .order_by(models.Transaction.date)
+        .all()
+    )
+
+    # Calculate total: expense - income (what's owed on the card)
+    total = _sum_where(
+        db,
+        models.Transaction.account_id == account_id,
+        models.Transaction.user_id == user_id,
+        models.Transaction.type == "expense",
+        models.Transaction.date >= period_start,
+        models.Transaction.date <= period_end,
+    ) - _sum_where(
+        db,
+        models.Transaction.account_id == account_id,
+        models.Transaction.user_id == user_id,
+        models.Transaction.type == "income",
+        models.Transaction.date >= period_start,
+        models.Transaction.date <= period_end,
+    )
+
+    # Convert transactions to TransactionOut
+    transaction_outs = [
+        schemas.TransactionOut.model_validate(tx, from_attributes=True) for tx in transactions
+    ]
+
+    return schemas.CreditCardInvoiceOut(
+        period_start=period_start,
+        period_end=period_end,
+        due_date=due_date,
+        total=total,
+        transactions=transaction_outs,
+    )
