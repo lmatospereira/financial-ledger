@@ -67,7 +67,7 @@ const emptyForm: GoalInput = {
   target_amount: 0,
   account_id: 0,
   target_date: null,
-  color: '#4F46E5',
+  color: '#820AD1',
 }
 
 export default function Goals() {
