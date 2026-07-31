@@ -28,6 +28,10 @@ class Account(Base):
     # "checking" | "savings" | "wallet" | "credit_card" | "other"
     type: Mapped[str] = mapped_column(String, nullable=False)
     color: Mapped[str] = mapped_column(String, nullable=False)  # hex color, e.g. "#FF0000"
+    # Credit card specific: day of month (1-31) the billing cycle closes
+    closing_day: Mapped[int | None] = mapped_column(nullable=True)
+    # Credit card specific: day of month (1-31) the invoice is due (in the following month)
+    due_day: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
