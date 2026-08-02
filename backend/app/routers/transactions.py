@@ -25,6 +25,7 @@ def list_transactions(
     month: int = Query(..., ge=1, le=12),
     year: int = Query(...),
     account_id: Optional[int] = Query(None),
+    status_filter: Optional[str] = Query(None, alias="status"),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -35,7 +36,7 @@ def list_transactions(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found")
     # Generate any due recurring transactions for the current user
     crud.generate_due_recurring_transactions(db, current_user.id)
-    return crud.get_transactions(db, current_user.id, month, year, account_id)
+    return crud.get_transactions(db, current_user.id, month, year, account_id, status_filter)
 
 
 @router.post("/transactions", response_model=schemas.TransactionOut, status_code=status.HTTP_201_CREATED)
@@ -101,6 +102,22 @@ def delete_transaction(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
     crud.delete_transaction(db, db_transaction)
     return None
+
+
+@router.post("/transactions/{transaction_id}/confirm", response_model=schemas.TransactionOut)
+def confirm_transaction(
+    transaction_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return crud.confirm_transaction(db, transaction_id, current_user.id)
+    except KeyError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Transaction already confirmed"
+        )
 
 
 @router.get("/summary", response_model=schemas.SummaryOut)
