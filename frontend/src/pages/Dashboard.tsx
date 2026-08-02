@@ -99,6 +99,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null)
 
   const [hiddenWidgets, setHiddenWidgets] = useState<string[]>([])
+  const [draftHiddenWidgets, setDraftHiddenWidgets] = useState<string[]>([])
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
   const [savingPreferences, setSavingPreferences] = useState(false)
 
@@ -185,10 +186,16 @@ export default function Dashboard() {
     await loadData()
   }
 
+  const openSettingsDialog = () => {
+    setDraftHiddenWidgets(hiddenWidgets)
+    setSettingsDialogOpen(true)
+  }
+
   const handleSavePreferences = async () => {
     setSavingPreferences(true)
     try {
-      await updateDashboardPreferences(hiddenWidgets)
+      await updateDashboardPreferences(draftHiddenWidgets)
+      setHiddenWidgets(draftHiddenWidgets)
       setSettingsDialogOpen(false)
     } catch (err) {
       console.error('Failed to save preferences:', err)
@@ -197,8 +204,8 @@ export default function Dashboard() {
     }
   }
 
-  const toggleWidget = (widgetName: string) => {
-    setHiddenWidgets((prev) =>
+  const toggleDraftWidget = (widgetName: string) => {
+    setDraftHiddenWidgets((prev) =>
       prev.includes(widgetName)
         ? prev.filter((w) => w !== widgetName)
         : [...prev, widgetName],
@@ -227,8 +234,8 @@ export default function Dashboard() {
         <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <MonthSelector month={month} year={year} onChange={handleMonthChange} />
           <IconButton
-            aria-label="Preferencias do dashboard"
-            onClick={() => setSettingsDialogOpen(true)}
+            aria-label="Preferências do dashboard"
+            onClick={openSettingsDialog}
             size="small"
           >
             <TuneIcon />
@@ -465,8 +472,8 @@ export default function Dashboard() {
             <FormControlLabel
               control={
                 <Checkbox
-                  checked={!hiddenWidgets.includes('balance')}
-                  onChange={() => toggleWidget('balance')}
+                  checked={!draftHiddenWidgets.includes('balance')}
+                  onChange={() => toggleDraftWidget('balance')}
                 />
               }
               label="Mostrar saldo"
@@ -474,8 +481,8 @@ export default function Dashboard() {
             <FormControlLabel
               control={
                 <Checkbox
-                  checked={!hiddenWidgets.includes('alerts')}
-                  onChange={() => toggleWidget('alerts')}
+                  checked={!draftHiddenWidgets.includes('alerts')}
+                  onChange={() => toggleDraftWidget('alerts')}
                 />
               }
               label="Mostrar próximos vencimentos"

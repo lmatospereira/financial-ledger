@@ -201,7 +201,7 @@ export default function Users() {
     <Layout>
       <Stack spacing={3}>
         <Typography variant="h5" sx={{ fontWeight: 700 }}>
-          Usuarios
+          Usuários
         </Typography>
 
         {error && <Alert severity="error">{error}</Alert>}
@@ -214,7 +214,7 @@ export default function Users() {
           ) : users.length === 0 ? (
             <Box sx={{ py: 8, textAlign: 'center', color: 'text.secondary' }}>
               <GroupOutlinedIcon sx={{ fontSize: 48, mb: 1, opacity: 0.5 }} />
-              <Typography variant="body1">Nenhum usuario cadastrado.</Typography>
+              <Typography variant="body1">Nenhum usuário cadastrado.</Typography>
             </Box>
           ) : (
             <List disablePadding>
@@ -258,11 +258,11 @@ export default function Users() {
                             @{user.username}
                           </Typography>
                           {user.id === currentUser?.id && (
-                            <Chip label="Voce" size="small" variant="outlined" />
+                            <Chip label="Você" size="small" variant="outlined" />
                           )}
                         </Stack>
                       }
-                      secondary={user.is_admin ? 'Administrador' : 'Usuario'}
+                      secondary={user.is_admin ? 'Administrador' : 'Usuário'}
                     />
                   </ListItem>
                 </Box>
@@ -274,7 +274,7 @@ export default function Users() {
 
       <Fab
         color="primary"
-        aria-label="Adicionar usuario"
+        aria-label="Adicionar usuário"
         onClick={openCreateForm}
         sx={{ position: 'fixed', bottom: 24, right: 24 }}
       >
@@ -282,7 +282,7 @@ export default function Users() {
       </Fab>
 
       <Dialog open={formOpen} onClose={() => setFormOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>{editing ? 'Editar usuario' : 'Novo usuario'}</DialogTitle>
+        <DialogTitle>{editing ? 'Editar usuário' : 'Novo usuário'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2.5} sx={{ mt: 1 }}>
             {formError && <Alert severity="error">{formError}</Alert>}
@@ -297,14 +297,14 @@ export default function Users() {
             />
 
             <TextField
-              label="Usuario"
+              label="Usuário"
               value={form.username}
               onChange={(e) =>
                 setForm((prev) => ({ ...prev, username: e.target.value }))
               }
               fullWidth
               autoComplete="username"
-              helperText="Sempre salvo em minusculo, sem espacos"
+              helperText="Sempre salvo em minúsculo, sem espaços"
             />
 
             {!editing && (
@@ -345,14 +345,14 @@ export default function Users() {
       </Dialog>
 
       <Dialog open={Boolean(pendingDelete)} onClose={() => setPendingDelete(null)}>
-        <DialogTitle>Excluir usuario?</DialogTitle>
+        <DialogTitle>Excluir usuário?</DialogTitle>
         <DialogContent>
           {deleteError ? (
             <Alert severity="error">{deleteError}</Alert>
           ) : (
             <DialogContentText>
               Tem certeza que deseja excluir "{pendingDelete?.name}" (@{pendingDelete?.username})?
-              Essa acao nao pode ser desfeita.
+              Essa ação não pode ser desfeita.
             </DialogContentText>
           )}
         </DialogContent>
