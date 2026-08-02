@@ -107,10 +107,29 @@ export async function deleteUser(id: number): Promise<void> {
   await api.delete(`/users/${id}`)
 }
 
+export async function resetUserPassword(
+  userId: number,
+  newPassword: string,
+): Promise<CurrentUser> {
+  const { data } = await api.post<CurrentUser>(`/users/${userId}/reset-password`, {
+    new_password: newPassword,
+  })
+  return data
+}
+
 export async function changeMyPassword(
   payload: ChangePasswordRequest,
 ): Promise<void> {
   await api.put('/users/me/password', payload)
+}
+
+export async function updateDashboardPreferences(
+  hiddenWidgets: string[],
+): Promise<CurrentUser> {
+  const { data } = await api.put<CurrentUser>('/users/me/dashboard-preferences', {
+    hidden_widgets: hiddenWidgets,
+  })
+  return data
 }
 
 export async function getAccounts(): Promise<Account[]> {
