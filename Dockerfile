@@ -30,6 +30,10 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 # Copy backend application code.
 COPY backend/app ./backend/app
 
+# Copy Alembic migration configuration and migration files.
+COPY backend/alembic.ini ./backend/alembic.ini
+COPY backend/migrations ./backend/migrations
+
 # Copy the frontend's built static assets from stage 1 into a directory the
 # backend serves via FastAPI's StaticFiles (no Nginx/domain/HTTPS yet).
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
