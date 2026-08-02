@@ -1,4 +1,6 @@
 """Tests for bills: CRUD operations, payment flow, and isolation."""
+from datetime import date
+
 import pytest
 
 from app import auth, crud
@@ -186,7 +188,10 @@ def test_pay_bill(client, auth_headers, default_account, expense_category):
     assert body["account_id"] == default_account["id"]
 
     # Verify transaction was created (today's month/year, since transaction is created on payment date)
-    tx_response = client.get("/api/transactions?month=7&year=2026", headers=auth_headers)
+    today = date.today()
+    tx_response = client.get(
+        f"/api/transactions?month={today.month}&year={today.year}", headers=auth_headers
+    )
     transactions = tx_response.json()
     assert len(transactions) == 1
     tx = transactions[0]
@@ -278,7 +283,10 @@ def test_pay_bill_does_not_delete_linked_transaction_on_bill_delete(client, auth
     client.delete(f"/api/bills/{bill['id']}", headers=auth_headers)
 
     # Transaction should still exist (in current month/year when paid)
-    tx_response = client.get("/api/transactions?month=7&year=2026", headers=auth_headers)
+    today = date.today()
+    tx_response = client.get(
+        f"/api/transactions?month={today.month}&year={today.year}", headers=auth_headers
+    )
     transactions = tx_response.json()
     assert len(transactions) == 1
     assert transactions[0]["id"] == tx_id
