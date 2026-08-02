@@ -53,6 +53,34 @@ def change_password(
     return crud.update_user_password(db, current_user, auth.hash_password(payload.new_password))
 
 
+@router.post("/{user_id}/reset-password", response_model=schemas.UserOut)
+@limiter.limit("5/minute")
+def reset_password(
+    request: Request,
+    user_id: int,
+    payload: schemas.PasswordReset,
+    current_user: models.User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    db_user = crud.get_user(db, user_id)
+    if db_user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return crud.update_user_password(db, db_user, auth.hash_password(payload.new_password))
+
+
+@router.put("/me/dashboard-preferences", response_model=schemas.UserOut)
+def update_dashboard_preferences(
+    payload: schemas.DashboardPreferencesUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Join the list of hidden widget ids into a comma-separated string
+    current_user.dashboard_hidden_widgets = ",".join(payload.hidden_widgets) if payload.hidden_widgets else None
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
 @router.put("/{user_id}", response_model=schemas.UserOut)
 def update_user(
     user_id: int,

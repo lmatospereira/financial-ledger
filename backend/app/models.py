@@ -17,6 +17,9 @@ class User(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Dashboard widget preferences: comma-separated list of hidden widget ids (e.g. "balance,alerts").
+    # Stored as a comma-separated string to avoid a separate table for this small, display-only data.
+    dashboard_hidden_widgets: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class Account(Base):
