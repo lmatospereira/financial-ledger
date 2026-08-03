@@ -259,11 +259,17 @@ def delete_transaction(db: Session, db_transaction: models.Transaction) -> None:
     db.commit()
 
 
-def confirm_transaction(db: Session, transaction_id: int, user_id: int) -> models.Transaction:
+def confirm_transaction(
+    db: Session, transaction_id: int, user_id: int, account_id: int | None = None
+) -> models.Transaction:
     """Confirm a pending transaction, making it count toward balance/summary.
 
+    If `account_id` is given, the transaction is reassigned to that account
+    first (mirrors the Bill pay flow, which lets you pick which account pays).
+
     Returns the updated transaction.
-    Raises KeyError if not found or not owned by user.
+    Raises KeyError if the transaction (or the given account) isn't found or
+    isn't owned by user.
     Raises ValueError if already confirmed.
     """
     db_transaction = (
@@ -276,6 +282,12 @@ def confirm_transaction(db: Session, transaction_id: int, user_id: int) -> model
 
     if db_transaction.status == "confirmed":
         raise ValueError("Transaction already confirmed")
+
+    if account_id is not None and account_id != db_transaction.account_id:
+        db_account = get_account(db, account_id, user_id)
+        if db_account is None:
+            raise KeyError("account not found")
+        db_transaction.account_id = account_id
 
     db_transaction.status = "confirmed"
     db.commit()

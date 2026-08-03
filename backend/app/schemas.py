@@ -171,6 +171,13 @@ class TransactionUpdate(TransactionBase):
     pass
 
 
+class TransactionConfirm(BaseModel):
+    # Lets the caller switch which account pays a pending transaction at
+    # confirm time (mirrors the Bill pay flow) -- omit to keep the account
+    # already set on the transaction.
+    account_id: Optional[int] = None
+
+
 class TransactionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
