@@ -5,6 +5,7 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
 import CreditCardIcon from '@mui/icons-material/CreditCard'
 import RepeatIcon from '@mui/icons-material/Repeat'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
 import {
   Box,
   Button,
@@ -30,6 +31,7 @@ interface TransactionListProps {
   transactions: Transaction[]
   onEdit: (transaction: Transaction) => void
   onDelete: (transaction: Transaction) => Promise<void>
+  onConfirm?: (transaction: Transaction) => Promise<void>
 }
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
@@ -110,10 +112,12 @@ export default function TransactionList({
   transactions,
   onEdit,
   onDelete,
+  onConfirm,
 }: TransactionListProps) {
   const theme = useTheme()
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   const sorted = [...transactions].sort((a, b) =>
     a.date === b.date ? b.id - a.id : a.date < b.date ? 1 : -1,
@@ -129,6 +133,16 @@ export default function TransactionList({
       setPendingDelete(null)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleConfirm = async (transaction: Transaction) => {
+    if (!onConfirm) return
+    setConfirming(true)
+    try {
+      await onConfirm(transaction)
+    } finally {
+      setConfirming(false)
     }
   }
 
@@ -195,6 +209,17 @@ export default function TransactionList({
                       sx={{ py: 1.5 }}
                       secondaryAction={
                         <Stack direction="row" spacing={0.5}>
+                          {/* Show confirm button for pending transactions */}
+                          {transaction.status === 'pending' && onConfirm && (
+                            <IconButton
+                              aria-label="Confirmar"
+                              size="small"
+                              onClick={() => handleConfirm(transaction)}
+                              disabled={confirming}
+                            >
+                              <CheckCircleOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          )}
                           {/* Transfers aren't editable through TransactionForm
                               (it never submits type: 'transfer') — hide Edit so
                               users aren't offered a broken flow. */}
@@ -270,19 +295,33 @@ export default function TransactionList({
                               {transaction.account?.name ?? 'Conta'} →{' '}
                               {transaction.to_account?.name ?? 'Conta'}
                             </Typography>
-                          ) : transaction.category ? (
-                            <Chip
-                              size="small"
-                              label={transaction.category.name}
-                              sx={{
-                                mt: 0.5,
-                                bgcolor: transaction.category.color,
-                                color: 'white',
-                                height: 20,
-                                fontSize: 11,
-                              }}
-                            />
-                          ) : undefined
+                          ) : (
+                            <Stack spacing={0.5} direction="row" sx={{ mt: 0.5, alignItems: 'center', flexWrap: 'wrap' }}>
+                              {transaction.status === 'pending' && (
+                                <Chip
+                                  size="small"
+                                  label="Pendente"
+                                  color="warning"
+                                  sx={{
+                                    height: 20,
+                                    fontSize: 11,
+                                  }}
+                                />
+                              )}
+                              {transaction.category && (
+                                <Chip
+                                  size="small"
+                                  label={transaction.category.name}
+                                  sx={{
+                                    bgcolor: transaction.category.color,
+                                    color: 'white',
+                                    height: 20,
+                                    fontSize: 11,
+                                  }}
+                                />
+                              )}
+                            </Stack>
+                          )
                         }
                       />
                       <Typography
