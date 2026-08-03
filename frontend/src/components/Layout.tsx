@@ -6,6 +6,7 @@ import LogoutIcon from '@mui/icons-material/Logout'
 import PersonOutlineIcon from '@mui/icons-material/PersonOutlineOutlined'
 import LightModeIcon from '@mui/icons-material/LightMode'
 import DarkModeIcon from '@mui/icons-material/DarkMode'
+import MenuIcon from '@mui/icons-material/Menu'
 import {
   AppBar,
   Avatar,
@@ -13,7 +14,10 @@ import {
   Button,
   Container,
   Divider,
+  Drawer,
   IconButton,
+  List,
+  ListItemButton,
   ListItemIcon,
   ListItemText,
   Menu,
@@ -43,6 +47,7 @@ export default function Layout({ children }: LayoutProps) {
 
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
 
   const handleLogout = () => {
     setMenuAnchor(null)
@@ -75,6 +80,14 @@ export default function Layout({ children }: LayoutProps) {
     <Box sx={{ minHeight: '100%', bgcolor: 'background.default' }}>
       <AppBar position="sticky" color="inherit" sx={{ bgcolor: 'background.paper' }}>
         <Toolbar sx={{ gap: 1 }}>
+          <IconButton
+            aria-label="Menu"
+            onClick={() => setMobileDrawerOpen(true)}
+            size="small"
+            sx={{ display: { xs: 'flex', md: 'none' }, mr: 1 }}
+          >
+            <MenuIcon />
+          </IconButton>
           <AccountBalanceWalletIcon color="primary" />
           <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
             Livro Caixa
@@ -155,24 +168,30 @@ export default function Layout({ children }: LayoutProps) {
             </MenuItem>
           </Menu>
         </Toolbar>
-        <Stack
-          direction="row"
-          spacing={1}
-          useFlexGap
-          sx={{ display: { xs: 'flex', md: 'none' }, flexWrap: 'wrap', px: 2, pb: 1 }}
-        >
-          {navItems.map((item) => (
-            <Button
-              key={item.path}
-              onClick={() => navigate(item.path)}
-              variant={location.pathname === item.path ? 'contained' : 'text'}
-              size="small"
-            >
-              {item.label}
-            </Button>
-          ))}
-        </Stack>
       </AppBar>
+
+      <Drawer
+        anchor="left"
+        open={mobileDrawerOpen}
+        onClose={() => setMobileDrawerOpen(false)}
+      >
+        <Box sx={{ width: 280, py: 2 }}>
+          <List disablePadding>
+            {navItems.map((item) => (
+              <ListItemButton
+                key={item.path}
+                onClick={() => {
+                  navigate(item.path)
+                  setMobileDrawerOpen(false)
+                }}
+                selected={location.pathname === item.path}
+              >
+                <ListItemText primary={item.label} />
+              </ListItemButton>
+            ))}
+          </List>
+        </Box>
+      </Drawer>
       <Container maxWidth="md" sx={{ py: { xs: 2, sm: 4 } }}>
         {children}
       </Container>

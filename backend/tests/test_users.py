@@ -272,3 +272,145 @@ def test_change_password_any_authenticated_user(client, db_session):
         headers=headers,
     )
     assert response.status_code == 200
+
+
+# ---------- POST /api/users/{user_id}/reset-password ----------
+def test_reset_password_admin_only(client, auth_headers, db_session):
+    # Create a target user and a non-admin user
+    target = client.post(
+        "/api/users",
+        json={"username": "target", "name": "Target", "password": "targetpass123", "is_admin": False},
+        headers=auth_headers,
+    ).json()
+    make_regular_user(db_session)
+    headers = login(client, "regular", "regularpass123")
+
+    # Non-admin cannot reset another user's password
+    response = client.post(
+        f"/api/users/{target['id']}/reset-password",
+        json={"new_password": "newpass123"},
+        headers=headers,
+    )
+    assert response.status_code == 403
+
+
+def test_reset_password_as_admin(client, auth_headers):
+    # Create a target user
+    target = client.post(
+        "/api/users",
+        json={"username": "target", "name": "Target", "password": "targetpass123", "is_admin": False},
+        headers=auth_headers,
+    ).json()
+
+    # Admin can reset the password
+    response = client.post(
+        f"/api/users/{target['id']}/reset-password",
+        json={"new_password": "brandnewpass123"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == target["id"]
+
+    # Verify the user can log in with the new password
+    login_response = client.post(
+        "/api/auth/login",
+        json={"username": "target", "password": "brandnewpass123"},
+    )
+    assert login_response.status_code == 200
+
+    # Verify the old password no longer works
+    old_login = client.post(
+        "/api/auth/login",
+        json={"username": "target", "password": "targetpass123"},
+    )
+    assert old_login.status_code == 401
+
+
+def test_reset_password_user_not_found(client, auth_headers):
+    response = client.post(
+        "/api/users/999/reset-password",
+        json={"new_password": "newpass123"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+def test_reset_password_too_short(client, auth_headers):
+    # Create a target user
+    target = client.post(
+        "/api/users",
+        json={"username": "target", "name": "Target", "password": "targetpass123", "is_admin": False},
+        headers=auth_headers,
+    ).json()
+
+    # Attempt to reset with password < 8 chars should fail with 422
+    response = client.post(
+        f"/api/users/{target['id']}/reset-password",
+        json={"new_password": "short"},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
+def test_reset_password_requires_auth(client):
+    response = client.post(
+        "/api/users/1/reset-password",
+        json={"new_password": "newpass123"},
+    )
+    assert response.status_code == 401
+
+
+# ---------- PUT /api/users/me/dashboard-preferences ----------
+def test_update_dashboard_preferences_sets_hidden_widgets(client, auth_headers):
+    response = client.put(
+        "/api/users/me/dashboard-preferences",
+        json={"hidden_widgets": ["balance", "alerts"]},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["dashboard_hidden_widgets"] == ["balance", "alerts"]
+
+
+def test_update_dashboard_preferences_empty_list(client, auth_headers):
+    response = client.put(
+        "/api/users/me/dashboard-preferences",
+        json={"hidden_widgets": []},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["dashboard_hidden_widgets"] == []
+
+
+def test_update_dashboard_preferences_persists(client, auth_headers, db_session):
+    # Update preferences
+    client.put(
+        "/api/users/me/dashboard-preferences",
+        json={"hidden_widgets": ["balance"]},
+        headers=auth_headers,
+    )
+
+    # Verify it persists in a subsequent GET /api/auth/me
+    response = client.get("/api/auth/me", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["dashboard_hidden_widgets"] == ["balance"]
+
+
+def test_update_dashboard_preferences_requires_auth(client):
+    response = client.put(
+        "/api/users/me/dashboard-preferences",
+        json={"hidden_widgets": ["balance"]},
+    )
+    assert response.status_code == 401
+
+
+def test_user_without_preferences_gets_empty_list(client, auth_headers):
+    # A user created without setting preferences should get an empty list, not None
+    response = client.get("/api/auth/me", headers=auth_headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["dashboard_hidden_widgets"] == []
+    assert body["dashboard_hidden_widgets"] is not None

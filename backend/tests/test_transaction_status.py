@@ -297,3 +297,65 @@ def test_transaction_status_cross_user_isolation(client, auth_headers, user_a_pe
     alice_txs = response.json()
     assert len(alice_txs) == 1
     assert alice_txs[0]["id"] == user_a_pending_transaction["transaction"]["id"]
+
+
+# ---------- Confirm with account switch (pay-at-confirm-time) ----------
+@pytest.fixture()
+def second_account(client, auth_headers):
+    response = client.post(
+        "/api/accounts",
+        json={"name": "Savings", "type": "savings", "color": "#0000FF"},
+        headers=auth_headers,
+    )
+    return response.json()
+
+
+def test_confirm_with_account_switch(client, auth_headers, income_category, default_account, second_account):
+    """Confirming with an account_id reassigns the transaction to that account."""
+    pending_tx = make_transaction(
+        client, auth_headers, income_category["id"], default_account["id"], amount=100.0, status="pending"
+    ).json()
+
+    response = client.post(
+        f"/api/transactions/{pending_tx['id']}/confirm",
+        json={"account_id": second_account["id"]},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    confirmed_tx = response.json()
+    assert confirmed_tx["status"] == "confirmed"
+    assert confirmed_tx["account_id"] == second_account["id"]
+
+    # Balance moved to the new account, not the original one.
+    accounts_by_id = {a["id"]: a for a in client.get("/api/accounts", headers=auth_headers).json()}
+    assert accounts_by_id[second_account["id"]]["balance"] == 100.0
+    assert accounts_by_id[default_account["id"]]["balance"] == 0.0
+
+
+def test_confirm_with_account_switch_invalid_account(client, auth_headers, income_category, default_account):
+    """Confirming with an account_id the user doesn't own returns 404."""
+    pending_tx = make_transaction(
+        client, auth_headers, income_category["id"], default_account["id"], status="pending"
+    ).json()
+
+    response = client.post(
+        f"/api/transactions/{pending_tx['id']}/confirm",
+        json={"account_id": 999},
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+def test_confirm_without_account_keeps_original(client, auth_headers, income_category, default_account):
+    """Confirming with no body (or account_id omitted) keeps the original account."""
+    pending_tx = make_transaction(
+        client, auth_headers, income_category["id"], default_account["id"], status="pending"
+    ).json()
+
+    response = client.post(
+        f"/api/transactions/{pending_tx['id']}/confirm",
+        json={},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["account_id"] == default_account["id"]

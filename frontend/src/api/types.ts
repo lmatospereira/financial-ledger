@@ -18,6 +18,7 @@ export interface CurrentUser {
   username: string
   name: string
   is_admin: boolean
+  dashboard_hidden_widgets?: string[]
 }
 
 export type UserInput = {
