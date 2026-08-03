@@ -181,8 +181,8 @@ export default function Dashboard() {
     await loadData()
   }
 
-  const handleConfirm = async (transaction: Transaction) => {
-    await confirmTransaction(transaction.id)
+  const handleConfirm = async (transaction: Transaction, accountId: number) => {
+    await confirmTransaction(transaction.id, accountId)
     await loadData()
   }
 
@@ -424,6 +424,7 @@ export default function Dashboard() {
           ) : (
             <TransactionList
               transactions={filteredTransactions}
+              accounts={accounts}
               onEdit={openEditForm}
               onDelete={handleDelete}
               onConfirm={handleConfirm}

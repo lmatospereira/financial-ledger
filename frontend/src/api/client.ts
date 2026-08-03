@@ -204,8 +204,13 @@ export async function deleteTransaction(id: number): Promise<void> {
   await api.delete(`/transactions/${id}`)
 }
 
-export async function confirmTransaction(id: number): Promise<Transaction> {
-  const { data } = await api.post<Transaction>(`/transactions/${id}/confirm`)
+export async function confirmTransaction(
+  id: number,
+  accountId?: number,
+): Promise<Transaction> {
+  const { data } = await api.post<Transaction>(`/transactions/${id}/confirm`, {
+    account_id: accountId,
+  })
   return data
 }
 
