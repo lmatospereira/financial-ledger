@@ -7,25 +7,26 @@ export function getTheme(mode: 'light' | 'dark'): Theme {
     palette: {
       mode,
       primary: {
-        main: isLight ? '#820AD1' : '#C084F5',
-        light: isLight ? '#A040E8' : '#D4A7FF',
-        dark: isLight ? '#6A088D' : '#9D5FD4',
+        main: isLight ? '#2196f3' : '#2196f3',
+        light: isLight ? '#e3f2fd' : '#e3f2fd',
+        dark: isLight ? '#1e88e5' : '#1e88e5',
         contrastText: '#FFFFFF',
       },
       secondary: {
-        main: isLight ? '#F5E6FF' : '#3D2255',
-        light: isLight ? '#F5E6FF' : '#5A3878',
-        contrastText: isLight ? '#820AD1' : '#C084F5',
+        main: isLight ? '#673ab7' : '#7c4dff',
+        light: isLight ? '#ede7f6' : '#d1c4e9',
+        dark: isLight ? '#5e35b1' : '#651fff',
+        contrastText: isLight ? '#673ab7' : '#ffffff',
       },
       success: {
-        main: isLight ? '#16A34A' : '#4ADE80',
+        main: isLight ? '#00e676' : '#00e676',
       },
       error: {
-        main: isLight ? '#DC2626' : '#F87171',
+        main: isLight ? '#f44336' : '#f44336',
       },
       background: {
-        default: isLight ? '#FAFAFA' : '#121016',
-        paper: isLight ? '#FFFFFF' : '#1C1922',
+        default: isLight ? '#f8fafc' : '#1a223f',
+        paper: isLight ? '#ffffff' : '#111936',
       },
       divider: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.08)',
     },
