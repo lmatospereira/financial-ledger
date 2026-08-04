@@ -422,7 +422,7 @@ class DashboardPreferencesUpdate(BaseModel):
 class AssetBase(BaseModel):
     ticker: str
     name: Optional[str] = None
-    asset_type: Literal["acao", "fii", "etf", "bdr", "outro"]
+    asset_type: Literal["acao", "fii", "etf", "bdr", "outro", "tesouro", "renda_fixa"]
     current_price: Optional[float] = Field(default=None, ge=0, le=MAX_AMOUNT)
 
 
@@ -432,7 +432,7 @@ class AssetCreate(AssetBase):
 
 class AssetUpdate(BaseModel):
     name: Optional[str] = None
-    asset_type: Optional[Literal["acao", "fii", "etf", "bdr", "outro"]] = None
+    asset_type: Optional[Literal["acao", "fii", "etf", "bdr", "outro", "tesouro", "renda_fixa"]] = None
     current_price: Optional[float] = Field(default=None, ge=0, le=MAX_AMOUNT)
 
 
@@ -508,6 +508,19 @@ class ImportPreviewResponse(BaseModel):
     # exactly -- lets the frontend skip the manual column-review step and
     # go straight to a one-click confirmation instead.
     is_known_b3_format: bool = False
+
+
+# ---------- Investment Position Snapshot ----------
+class PositionSnapshotOut(BaseModel):
+    date: date
+    asset_id: int
+    quantity_held: float
+    invested_value: float
+
+
+class ConsolidatedPositionOut(BaseModel):
+    date: date
+    total_invested_value: float
 
 
 # ---------- Import Commit Response ----------
