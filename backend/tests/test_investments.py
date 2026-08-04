@@ -468,6 +468,38 @@ def test_import_real_b3_format(client, auth_headers):
     assert by_asset[assets["B3SA3"]["id"]] == "provento"
 
 
+def test_import_guesses_asset_type_from_ticker(client, auth_headers):
+    """Newly created assets get a best-effort asset_type guessed from the
+    ticker suffix (acao/fii/bdr), instead of always "outro".
+    """
+    csv_content = (
+        "Data,Produto,Movimentação,Quantidade,Preço,Valor\n"
+        "2026-01-15,PETR4,Compra,10,30.00,300.00\n"
+        "2026-01-16,HGLG11,Compra,1,150.00,150.00\n"
+        "2026-01-17,AAPL34,Compra,1,50.00,50.00\n"
+        "2026-01-18,B3SA3,Compra,10,12.00,120.00\n"
+    )
+    response = client.post(
+        "/api/investments/import",
+        files={"file": ("mov.csv", csv_content.encode(), "text/csv")},
+        headers=auth_headers,
+    )
+    mapping = response.json()["detected_mapping"]
+    response = client.post(
+        "/api/investments/import",
+        files={"file": ("mov.csv", csv_content.encode(), "text/csv")},
+        data={"column_mapping": json.dumps(mapping)},
+        headers=auth_headers,
+    )
+    assert response.json()["committed"] is True
+
+    assets_by_ticker = {a["ticker"]: a for a in client.get("/api/investments/assets", headers=auth_headers).json()}
+    assert assets_by_ticker["PETR4"]["asset_type"] == "acao"
+    assert assets_by_ticker["HGLG11"]["asset_type"] == "fii"
+    assert assets_by_ticker["AAPL34"]["asset_type"] == "bdr"
+    assert assets_by_ticker["B3SA3"]["asset_type"] == "acao"
+
+
 def test_import_normalize_movement_types(client, auth_headers):
     """Test that movement types are normalized correctly."""
     csv_content = """Data,Ticker,Tipo,Quantidade,Preço,Valor
