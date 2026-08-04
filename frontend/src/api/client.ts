@@ -25,6 +25,7 @@ import type {
   LoginRequest,
   LoginResponse,
   MonthlyTrendEntry,
+  PositionHistoryEntry,
   PortfolioPosition,
   RecurringTransaction,
   RecurringTransactionInput,
@@ -444,6 +445,13 @@ export async function deleteInvestmentMovement(id: number): Promise<void> {
 
 export async function getPortfolio(): Promise<PortfolioPosition[]> {
   const { data } = await api.get<PortfolioPosition[]>('/investments/portfolio')
+  return data
+}
+
+export async function getPositionHistory(assetId?: number): Promise<PositionHistoryEntry[]> {
+  const { data } = await api.get<PositionHistoryEntry[]>('/investments/positions/history', {
+    params: assetId !== undefined ? { asset_id: assetId } : {},
+  })
   return data
 }
 

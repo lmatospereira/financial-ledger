@@ -996,6 +996,8 @@ def create_investment_movement(
     db.add(db_movement)
     db.commit()
     db.refresh(db_movement)
+    # Rebuild snapshots for this asset after creating the movement
+    rebuild_position_snapshots(db, user_id, asset_id=movement.asset_id)
     return db_movement
 
 
@@ -1004,15 +1006,161 @@ def update_investment_movement(
     db_movement: models.InvestmentMovement,
     movement: schemas.InvestmentMovementUpdate,
 ) -> models.InvestmentMovement:
+    # Track the old asset_id in case the asset is changed
+    old_asset_id = db_movement.asset_id
+
     for field, value in movement.model_dump(exclude_none=True).items():
         setattr(db_movement, field, value)
     db.commit()
     db.refresh(db_movement)
+
+    # Rebuild snapshots for both the old and new asset (if changed)
+    rebuild_position_snapshots(db, db_movement.user_id, asset_id=old_asset_id)
+    if db_movement.asset_id != old_asset_id:
+        rebuild_position_snapshots(db, db_movement.user_id, asset_id=db_movement.asset_id)
+
     return db_movement
 
 
 def delete_investment_movement(db: Session, db_movement: models.InvestmentMovement) -> None:
+    asset_id = db_movement.asset_id
+    user_id = db_movement.user_id
     db.delete(db_movement)
+    db.commit()
+    # Rebuild snapshots for this asset after deleting the movement
+    rebuild_position_snapshots(db, user_id, asset_id=asset_id)
+
+
+def get_position_snapshots_for_asset(
+    db: Session, asset_id: int, user_id: int
+) -> list[models.InvestmentPositionSnapshot]:
+    """Fetch all position snapshots for a specific asset belonging to a user."""
+    return (
+        db.query(models.InvestmentPositionSnapshot)
+        .filter(
+            models.InvestmentPositionSnapshot.asset_id == asset_id,
+            models.InvestmentPositionSnapshot.user_id == user_id,
+        )
+        .order_by(models.InvestmentPositionSnapshot.date)
+        .all()
+    )
+
+
+def get_position_snapshots_for_user(
+    db: Session, user_id: int
+) -> list[models.InvestmentPositionSnapshot]:
+    """Fetch all position snapshots for a user across all assets."""
+    return (
+        db.query(models.InvestmentPositionSnapshot)
+        .filter(models.InvestmentPositionSnapshot.user_id == user_id)
+        .order_by(models.InvestmentPositionSnapshot.date, models.InvestmentPositionSnapshot.asset_id)
+        .all()
+    )
+
+
+def _aggregate_investment_movements(
+    movements: list[models.InvestmentMovement],
+) -> tuple[float, float]:
+    """Aggregate a list of movements into (quantity_held, invested_value).
+
+    Cost basis is a simple weighted average of "compra" prices only (an MVP
+    simplification that deliberately avoids full FIFO/tax-lot accounting --
+    see get_portfolio's docstring). This is the single source of truth for
+    that math: get_portfolio (current position) and _compute_position_at_date
+    (historical position, via a date-filtered movement list) both call this,
+    so the two can never silently diverge.
+    """
+    quantity_held = 0.0
+    total_cost = 0.0
+    total_bought = 0.0
+
+    for movement in movements:
+        if movement.movement_type == "compra":
+            quantity_held += movement.quantity
+            total_cost += movement.total_value
+            total_bought += movement.quantity
+        elif movement.movement_type == "venda":
+            quantity_held -= movement.quantity
+        elif movement.movement_type in ("bonificacao", "desdobramento"):
+            quantity_held += movement.quantity
+
+    avg_price = total_cost / total_bought if total_bought > 0 else 0.0
+    invested_value = quantity_held * avg_price
+
+    return quantity_held, invested_value
+
+
+def _compute_position_at_date(movements: list[models.InvestmentMovement], as_of_date: date) -> tuple[float, float]:
+    """Helper to compute (quantity_held, invested_value) as of a specific date.
+
+    Replays movements up to and including as_of_date (movements must already
+    be sorted ascending by date -- get_investment_movements_by_asset does
+    this), then applies the shared cost-basis aggregation.
+    """
+    relevant = []
+    for movement in movements:
+        if movement.date > as_of_date:
+            break
+        relevant.append(movement)
+
+    return _aggregate_investment_movements(relevant)
+
+
+def rebuild_position_snapshots(
+    db: Session, user_id: int, asset_id: int | None = None
+) -> None:
+    """Rebuild position snapshots for a user, optionally scoped to a single asset.
+
+    Deletes existing snapshots (optionally for just one asset) and regenerates them
+    by replaying movements in chronological order. Emits one snapshot per (asset, date)
+    where a movement occurred on that date.
+
+    This keeps snapshots in sync after movements are created, updated, or deleted.
+    """
+    # Delete existing snapshots
+    if asset_id is not None:
+        db.query(models.InvestmentPositionSnapshot).filter(
+            models.InvestmentPositionSnapshot.user_id == user_id,
+            models.InvestmentPositionSnapshot.asset_id == asset_id,
+        ).delete()
+    else:
+        db.query(models.InvestmentPositionSnapshot).filter(
+            models.InvestmentPositionSnapshot.user_id == user_id,
+        ).delete()
+    db.commit()
+
+    # Fetch assets to rebuild snapshots for
+    if asset_id is not None:
+        assets = [db.query(models.Asset).filter(models.Asset.id == asset_id).first()]
+        if assets[0] is None:
+            return
+    else:
+        assets = get_assets(db, user_id)
+
+    # For each asset, replay movements and emit snapshots
+    for asset in assets:
+        movements = get_investment_movements_by_asset(db, asset.id, user_id)
+
+        # Group movements by date
+        movements_by_date: dict[date, list[models.InvestmentMovement]] = {}
+        for movement in movements:
+            if movement.date not in movements_by_date:
+                movements_by_date[movement.date] = []
+            movements_by_date[movement.date].append(movement)
+
+        # For each date that had a movement, compute the position state
+        for snapshot_date in sorted(movements_by_date.keys()):
+            quantity_held, invested_value = _compute_position_at_date(movements, snapshot_date)
+
+            snapshot = models.InvestmentPositionSnapshot(
+                user_id=user_id,
+                asset_id=asset.id,
+                date=snapshot_date,
+                quantity_held=quantity_held,
+                invested_value=invested_value,
+            )
+            db.add(snapshot)
+
     db.commit()
 
 
@@ -1031,29 +1179,13 @@ def get_portfolio(db: Session, user_id: int) -> list[schemas.PortfolioPositionOu
 
     for asset in assets:
         movements = get_investment_movements_by_asset(db, asset.id, user_id)
-
-        # Aggregate movements
-        quantity_held = 0.0
-        total_cost = 0.0
-        total_bought = 0.0
-
-        for movement in movements:
-            if movement.movement_type == "compra":
-                quantity_held += movement.quantity
-                total_cost += movement.total_value
-                total_bought += movement.quantity
-            elif movement.movement_type == "venda":
-                quantity_held -= movement.quantity
-            elif movement.movement_type in ("bonificacao", "desdobramento"):
-                quantity_held += movement.quantity
+        quantity_held, total_invested = _aggregate_investment_movements(movements)
 
         # Skip positions fully sold
         if quantity_held <= 0:
             continue
 
-        # Calculate weighted average price of purchases only
-        avg_price = total_cost / total_bought if total_bought > 0 else 0.0
-        total_invested = quantity_held * avg_price
+        avg_price = total_invested / quantity_held
 
         # Profitability only computable when the user has manually kept
         # current_price up to date (no live price feed exists yet).

@@ -257,7 +257,7 @@ export interface CreditCardInvoice {
 }
 
 // ---------- Investments ----------
-export type AssetType = 'acao' | 'fii' | 'etf' | 'bdr' | 'outro'
+export type AssetType = 'acao' | 'fii' | 'etf' | 'bdr' | 'tesouro' | 'renda_fixa' | 'outro'
 
 export type MovementType = 'compra' | 'venda' | 'bonificacao' | 'provento' | 'desdobramento' | 'outro'
 
@@ -296,6 +296,14 @@ export interface PortfolioPosition {
   current_value: number | null
   profit_loss: number | null
   profit_loss_pct: number | null
+}
+
+export interface PositionHistoryEntry {
+  date: string // ISO date
+  asset_id?: number
+  quantity_held?: number
+  invested_value?: number
+  total_invested_value?: number
 }
 
 export interface ImportPreviewResponse {
