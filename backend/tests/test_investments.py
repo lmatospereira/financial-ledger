@@ -296,13 +296,19 @@ def test_portfolio_fully_sold_excluded(client, auth_headers):
 
 
 def test_portfolio_with_bonus_and_split(client, auth_headers):
-    """Test portfolio with bonus shares and stock split."""
+    """Test portfolio with bonus shares and stock split.
+
+    Bonificacao and desdobramento dilute the average price by increasing
+    the "total_bought" quantity without changing total_cost. This ensures
+    that invested_value remains equal to the actual amount aportado (5000),
+    not artificially inflated.
+    """
     asset = make_asset(client, auth_headers, ticker="BONUS").json()
 
     # Buy 100 @ 50.00 = 5000.00
     make_movement(client, auth_headers, asset["id"], quantity=100.0, unit_price=50.0, total_value=5000.0)
 
-    # Bonus: +20 shares (no cost)
+    # Bonus: +20 shares (no cost, dilutes avg_price)
     make_movement(
         client,
         auth_headers,
@@ -313,7 +319,7 @@ def test_portfolio_with_bonus_and_split(client, auth_headers):
         total_value=0.0,
     )
 
-    # Stock split 2:1: we now have 240 (doubled)
+    # Stock split 2:1: +120 shares (no cost, further dilutes avg_price)
     make_movement(
         client,
         auth_headers,
@@ -331,8 +337,10 @@ def test_portfolio_with_bonus_and_split(client, auth_headers):
 
     position = portfolio[0]
     assert position["quantity_held"] == 240.0  # 100 + 20 + 120
-    assert position["avg_price"] == 50.0  # Still based only on "compra"
-    assert position["total_invested"] == 12000.0
+    # avg_price = 5000 / 240 ≈ 20.83
+    assert abs(position["avg_price"] - (5000.0 / 240.0)) < 0.01
+    # total_invested = 240 * (5000/240) = 5000 (only the actual aportado)
+    assert abs(position["total_invested"] - 5000.0) < 0.01
 
 
 # ========== B3 File Import Tests ==========
@@ -860,7 +868,12 @@ def test_position_snapshots_delete_triggers_rebuild(client, auth_headers):
 
 
 def test_position_snapshots_with_bonus_and_split(client, auth_headers):
-    """Test snapshots correctly track bonus shares and stock splits."""
+    """Test snapshots correctly track bonus shares and stock splits.
+
+    After bonificacao/desdobramento, the average cost dilutes (total_bought
+    increases without increasing total_cost), so invested_value stays equal
+    to the actual aportado (5000), not inflated.
+    """
     asset = make_asset(client, auth_headers, ticker="BONUSSNAP").json()
 
     # Buy 100 @ 50
@@ -874,7 +887,7 @@ def test_position_snapshots_with_bonus_and_split(client, auth_headers):
         total_value=5000.0,
     )
 
-    # Bonus: +20 shares
+    # Bonus: +20 shares (no cost)
     make_movement(
         client,
         auth_headers,
@@ -886,7 +899,7 @@ def test_position_snapshots_with_bonus_and_split(client, auth_headers):
         total_value=0.0,
     )
 
-    # Split 2:1: +100 shares
+    # Stock split: +120 shares (no cost)
     make_movement(
         client,
         auth_headers,
@@ -902,14 +915,19 @@ def test_position_snapshots_with_bonus_and_split(client, auth_headers):
     snapshots = response.json()
     assert len(snapshots) == 3
 
+    # Snapshot 1: Buy 100 @ 50
     assert snapshots[0]["quantity_held"] == 100.0
     assert snapshots[0]["invested_value"] == 5000.0
 
+    # Snapshot 2: +20 bonus shares
+    # total_bought = 100 + 20 = 120, avg_price = 5000 / 120 ≈ 41.67
     assert snapshots[1]["quantity_held"] == 120.0
-    assert snapshots[1]["invested_value"] == 6000.0  # 120 * 50
+    assert abs(snapshots[1]["invested_value"] - 5000.0) < 0.01
 
+    # Snapshot 3: +120 split shares
+    # total_bought = 100 + 20 + 120 = 240, avg_price = 5000 / 240 ≈ 20.83
     assert snapshots[2]["quantity_held"] == 240.0
-    assert snapshots[2]["invested_value"] == 12000.0  # 240 * 50
+    assert abs(snapshots[2]["invested_value"] - 5000.0) < 0.01
 
 
 def test_consolidated_position_history(client, auth_headers):
