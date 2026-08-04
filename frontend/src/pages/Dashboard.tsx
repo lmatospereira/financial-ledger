@@ -4,14 +4,22 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
 import RepeatIcon from '@mui/icons-material/Repeat'
 import CreditCardIcon from '@mui/icons-material/CreditCard'
+import TuneIcon from '@mui/icons-material/Tune'
 import {
   Alert,
   Box,
   Button,
   Card,
+  Checkbox,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Fab,
+  FormControlLabel,
+  IconButton,
   List,
   ListItem,
   ListItemIcon,
@@ -34,9 +42,11 @@ import {
   getAccounts,
   getApiErrorMessage,
   getCategories,
+  getCurrentUser,
   getUpcomingAlerts,
   getSummary,
   getTransactions,
+  updateDashboardPreferences,
   updateTransaction,
 } from '../api/client'
 import type { Account, Category, Summary, Transaction, TransactionInput, UpcomingAlert } from '../api/types'
@@ -88,6 +98,11 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const [hiddenWidgets, setHiddenWidgets] = useState<string[]>([])
+  const [draftHiddenWidgets, setDraftHiddenWidgets] = useState<string[]>([])
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
+  const [savingPreferences, setSavingPreferences] = useState(false)
+
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all')
   const [formOpen, setFormOpen] = useState(false)
@@ -125,6 +140,18 @@ export default function Dashboard() {
     loadData()
   }, [loadData])
 
+  useEffect(() => {
+    const fetchDashboardPreferences = async () => {
+      try {
+        const user = await getCurrentUser()
+        setHiddenWidgets(user.dashboard_hidden_widgets || [])
+      } catch (err) {
+        console.error('Failed to fetch dashboard preferences:', err)
+      }
+    }
+    fetchDashboardPreferences()
+  }, [])
+
   const handleMonthChange = (nextMonth: number, nextYear: number) => {
     setPeriod({ month: nextMonth, year: nextYear })
   }
@@ -154,9 +181,35 @@ export default function Dashboard() {
     await loadData()
   }
 
-  const handleConfirm = async (transaction: Transaction) => {
-    await confirmTransaction(transaction.id)
+  const handleConfirm = async (transaction: Transaction, accountId: number) => {
+    await confirmTransaction(transaction.id, accountId)
     await loadData()
+  }
+
+  const openSettingsDialog = () => {
+    setDraftHiddenWidgets(hiddenWidgets)
+    setSettingsDialogOpen(true)
+  }
+
+  const handleSavePreferences = async () => {
+    setSavingPreferences(true)
+    try {
+      await updateDashboardPreferences(draftHiddenWidgets)
+      setHiddenWidgets(draftHiddenWidgets)
+      setSettingsDialogOpen(false)
+    } catch (err) {
+      console.error('Failed to save preferences:', err)
+    } finally {
+      setSavingPreferences(false)
+    }
+  }
+
+  const toggleDraftWidget = (widgetName: string) => {
+    setDraftHiddenWidgets((prev) =>
+      prev.includes(widgetName)
+        ? prev.filter((w) => w !== widgetName)
+        : [...prev, widgetName],
+    )
   }
 
   const filteredTransactions = useMemo(() => {
@@ -178,13 +231,24 @@ export default function Dashboard() {
   return (
     <Layout>
       <Stack spacing={3}>
-        <MonthSelector month={month} year={year} onChange={handleMonthChange} />
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <MonthSelector month={month} year={year} onChange={handleMonthChange} />
+          <IconButton
+            aria-label="Preferências do dashboard"
+            onClick={openSettingsDialog}
+            size="small"
+          >
+            <TuneIcon />
+          </IconButton>
+        </Stack>
 
         {error && <Alert severity="error">{error}</Alert>}
 
-        <BalanceCard summary={summary} loading={loading} />
+        {!hiddenWidgets.includes('balance') && (
+          <BalanceCard summary={summary} loading={loading} />
+        )}
 
-        {upcomingAlerts.length > 0 && (
+        {!hiddenWidgets.includes('alerts') && upcomingAlerts.length > 0 && (
           <Card>
             <Box sx={{ px: 2, pt: 2 }}>
               <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
@@ -360,6 +424,7 @@ export default function Dashboard() {
           ) : (
             <TransactionList
               transactions={filteredTransactions}
+              accounts={accounts}
               onEdit={openEditForm}
               onDelete={handleDelete}
               onConfirm={handleConfirm}
@@ -400,6 +465,40 @@ export default function Dashboard() {
           await loadData()
         }}
       />
+
+      <Dialog open={settingsDialogOpen} onClose={() => setSettingsDialogOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Preferências do Dashboard</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={!draftHiddenWidgets.includes('balance')}
+                  onChange={() => toggleDraftWidget('balance')}
+                />
+              }
+              label="Mostrar saldo"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={!draftHiddenWidgets.includes('alerts')}
+                  onChange={() => toggleDraftWidget('alerts')}
+                />
+              }
+              label="Mostrar próximos vencimentos"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setSettingsDialogOpen(false)} disabled={savingPreferences}>
+            Cancelar
+          </Button>
+          <Button variant="contained" onClick={handleSavePreferences} disabled={savingPreferences}>
+            Salvar
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Layout>
   )
 }

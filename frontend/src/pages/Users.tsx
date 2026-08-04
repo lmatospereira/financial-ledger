@@ -3,6 +3,7 @@ import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import GroupOutlinedIcon from '@mui/icons-material/GroupOutlined'
+import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined'
 import {
   Alert,
   Box,
@@ -33,6 +34,7 @@ import {
   deleteUser,
   getApiErrorMessage,
   getUsers,
+  resetUserPassword,
   updateUser,
 } from '../api/client'
 import { useAuth } from '../context/authContext'
@@ -68,6 +70,12 @@ export default function Users() {
   const [pendingDelete, setPendingDelete] = useState<CurrentUser | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+
+  const [resetPasswordOpen, setResetPasswordOpen] = useState(false)
+  const [pendingPasswordReset, setPendingPasswordReset] = useState<CurrentUser | null>(null)
+  const [resetPasswordForm, setResetPasswordForm] = useState<string>('')
+  const [resetPasswordError, setResetPasswordError] = useState<string | null>(null)
+  const [resettingPassword, setResettingPassword] = useState(false)
 
   const loadUsers = async () => {
     setLoading(true)
@@ -162,6 +170,33 @@ export default function Users() {
     }
   }
 
+  const openPasswordResetDialog = (user: CurrentUser) => {
+    setPendingPasswordReset(user)
+    setResetPasswordForm('')
+    setResetPasswordError(null)
+    setResetPasswordOpen(true)
+  }
+
+  const handlePasswordResetSubmit = async () => {
+    setResetPasswordError(null)
+    if (!pendingPasswordReset) return
+    if (resetPasswordForm.length < 8) {
+      setResetPasswordError('A senha deve ter pelo menos 8 caracteres.')
+      return
+    }
+    setResettingPassword(true)
+    try {
+      await resetUserPassword(pendingPasswordReset.id, resetPasswordForm)
+      setResetPasswordOpen(false)
+      setPendingPasswordReset(null)
+      await loadUsers()
+    } catch (err) {
+      setResetPasswordError(getApiErrorMessage(err))
+    } finally {
+      setResettingPassword(false)
+    }
+  }
+
   return (
     <Layout>
       <Stack spacing={3}>
@@ -196,6 +231,13 @@ export default function Users() {
                           onClick={() => openEditForm(user)}
                         >
                           <EditOutlinedIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          aria-label="Redefinir senha"
+                          size="small"
+                          onClick={() => openPasswordResetDialog(user)}
+                        >
+                          <KeyOutlinedIcon fontSize="small" />
                         </IconButton>
                         <IconButton
                           aria-label="Excluir"
@@ -309,7 +351,7 @@ export default function Users() {
             <Alert severity="error">{deleteError}</Alert>
           ) : (
             <DialogContentText>
-              Tem certeza que deseja excluir “{pendingDelete?.name}” (@{pendingDelete?.username})?
+              Tem certeza que deseja excluir "{pendingDelete?.name}" (@{pendingDelete?.username})?
               Essa ação não pode ser desfeita.
             </DialogContentText>
           )}
@@ -320,6 +362,33 @@ export default function Users() {
           </Button>
           <Button color="error" variant="contained" onClick={confirmDelete} disabled={deleting}>
             Excluir
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={resetPasswordOpen} onClose={() => setResetPasswordOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Redefinir senha</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2.5} sx={{ mt: 1 }}>
+            {resetPasswordError && <Alert severity="error">{resetPasswordError}</Alert>}
+
+            <TextField
+              label="Nova senha"
+              type="password"
+              value={resetPasswordForm}
+              onChange={(e) => setResetPasswordForm(e.target.value)}
+              fullWidth
+              autoFocus
+              autoComplete="new-password"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setResetPasswordOpen(false)} disabled={resettingPassword}>
+            Cancelar
+          </Button>
+          <Button variant="contained" onClick={handlePasswordResetSubmit} disabled={resettingPassword}>
+            Salvar
           </Button>
         </DialogActions>
       </Dialog>

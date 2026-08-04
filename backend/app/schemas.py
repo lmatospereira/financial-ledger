@@ -55,6 +55,14 @@ class UserOut(BaseModel):
     username: str
     name: str
     is_admin: bool
+    dashboard_hidden_widgets: list[str] = []
+
+    @field_validator("dashboard_hidden_widgets", mode="before")
+    @classmethod
+    def _parse_dashboard_hidden_widgets(cls, v: str | None) -> list[str]:
+        if v is None or v == "":
+            return []
+        return [w.strip() for w in v.split(",") if w.strip()]
 
 
 class UserCreate(BaseModel):
@@ -76,6 +84,10 @@ class UserUpdate(BaseModel):
 
 class PasswordChange(BaseModel):
     current_password: str
+    new_password: str = Field(min_length=8)
+
+
+class PasswordReset(BaseModel):
     new_password: str = Field(min_length=8)
 
 
@@ -157,6 +169,13 @@ class TransactionCreate(TransactionBase):
 
 class TransactionUpdate(TransactionBase):
     pass
+
+
+class TransactionConfirm(BaseModel):
+    # Lets the caller switch which account pays a pending transaction at
+    # confirm time (mirrors the Bill pay flow) -- omit to keep the account
+    # already set on the transaction.
+    account_id: Optional[int] = None
 
 
 class TransactionOut(BaseModel):
@@ -392,3 +411,8 @@ class CreditCardInvoiceOut(BaseModel):
     due_date: Optional[date] = None
     total: float
     transactions: list[TransactionOut]
+
+
+# ---------- Dashboard Preferences ----------
+class DashboardPreferencesUpdate(BaseModel):
+    hidden_widgets: list[str]
