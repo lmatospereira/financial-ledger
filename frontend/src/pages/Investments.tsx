@@ -225,7 +225,7 @@ export default function Investments() {
             ticker,
             name: null,
             asset_type: newAssetType,
-            current_price: null as unknown as number | null,
+            current_price: null,
           })
           assetId = newAsset.id
           setAssets((prev) => [...prev, newAsset])
