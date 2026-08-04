@@ -30,13 +30,16 @@ import {
   createAsset,
   createInvestmentMovement,
   getApiErrorMessage,
+  getAssets,
   getPortfolio,
   importInvestmentsFile,
 } from '../api/client'
 import type {
+  Asset,
   AssetType,
   InvestmentMovementInput,
   ImportPreviewResponse,
+  MovementType,
   PortfolioPosition,
 } from '../api/types'
 
@@ -74,6 +77,7 @@ const emptyMovementForm: InvestmentMovementInput = {
 
 export default function Investments() {
   const [portfolio, setPortfolio] = useState<PortfolioPosition[]>([])
+  const [assets, setAssets] = useState<Asset[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -108,8 +112,9 @@ export default function Investments() {
     setLoading(true)
     setError(null)
     try {
-      const portfolioData = await getPortfolio()
+      const [portfolioData, assetsData] = await Promise.all([getPortfolio(), getAssets()])
       setPortfolio(portfolioData)
+      setAssets(assetsData)
     } catch (err) {
       setError(getApiErrorMessage(err))
     } finally {
@@ -142,28 +147,32 @@ export default function Investments() {
       return
     }
 
-    // If using a new ticker, create the asset first
-    let assetId = form.asset_id
-    if (newTicker && (!form.asset_id || form.asset_id === 0)) {
+    const ticker = newTicker.trim().toUpperCase()
+    if (!ticker) {
+      setFormError('Informe um ticker.')
+      return
+    }
+
+    // Reuse the asset if this ticker already exists for the user; only
+    // create a new one the first time a ticker is used (the backend
+    // enforces one asset per ticker per user, so re-creating on every
+    // movement would fail with a conflict from the second movement on).
+    let assetId = assets.find((a) => a.ticker === ticker)?.id
+    if (!assetId) {
       try {
         setSubmitting(true)
         const newAsset = await createAsset({
-          ticker: newTicker.toUpperCase(),
+          ticker,
           name: null,
           asset_type: newAssetType,
         })
         assetId = newAsset.id
+        setAssets((prev) => [...prev, newAsset])
       } catch (err) {
         setFormError(getApiErrorMessage(err))
         setSubmitting(false)
         return
       }
-    }
-
-    if (!assetId || assetId === 0) {
-      setFormError('Selecione ou informe um ticker.')
-      setSubmitting(false)
-      return
     }
 
     setSubmitting(true)
@@ -395,7 +404,10 @@ export default function Investments() {
               label="Tipo de movimento"
               value={form.movement_type}
               onChange={(e) =>
-                setForm((prev) => ({ ...prev, movement_type: e.target.value as any }))
+                setForm((prev) => ({
+                  ...prev,
+                  movement_type: e.target.value as MovementType,
+                }))
               }
               fullWidth
             >

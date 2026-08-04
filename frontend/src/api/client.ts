@@ -456,11 +456,10 @@ export async function importInvestmentsFile(
   if (columnMapping) {
     formData.append('column_mapping', JSON.stringify(columnMapping))
   }
-  const { data } = await api.post<ImportResponse>('/investments/import', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  })
+  // Let the browser set Content-Type itself (with the required multipart
+  // boundary) -- overriding it here would omit the boundary and break
+  // parsing server-side.
+  const { data } = await api.post<ImportResponse>('/investments/import', formData)
   return data
 }
 
