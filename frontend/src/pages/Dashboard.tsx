@@ -257,47 +257,51 @@ export default function Dashboard() {
 
         {/* KPI Stats Row */}
         <Grid container spacing={2}>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <StatCard
-              icon={<AccountBalanceWalletIcon />}
-              label="Saldo atual"
-              value={
-                summary
-                  ? currencyFormatter.format(summary.balance)
-                  : '—'
-              }
-              loading={loading}
-              variant={summary && summary.balance >= 0 ? 'positive' : 'negative'}
-            />
-          </Grid>
+          {!hiddenWidgets.includes('balance') && (
+            <>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <StatCard
+                  icon={<AccountBalanceWalletIcon />}
+                  label="Saldo atual"
+                  value={
+                    summary
+                      ? currencyFormatter.format(summary.balance)
+                      : '—'
+                  }
+                  loading={loading}
+                  variant={summary && summary.balance >= 0 ? 'positive' : 'negative'}
+                />
+              </Grid>
 
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <StatCard
-              icon={<ArrowUpwardIcon />}
-              label="Receitas do mês"
-              value={
-                summary
-                  ? currencyFormatter.format(summary.income_total)
-                  : '—'
-              }
-              loading={loading}
-              variant="positive"
-            />
-          </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <StatCard
+                  icon={<ArrowUpwardIcon />}
+                  label="Receitas do mês"
+                  value={
+                    summary
+                      ? currencyFormatter.format(summary.income_total)
+                      : '—'
+                  }
+                  loading={loading}
+                  variant="positive"
+                />
+              </Grid>
 
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <StatCard
-              icon={<ArrowDownwardIcon />}
-              label="Despesas do mês"
-              value={
-                summary
-                  ? currencyFormatter.format(summary.expense_total)
-                  : '—'
-              }
-              loading={loading}
-              variant="negative"
-            />
-          </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <StatCard
+                  icon={<ArrowDownwardIcon />}
+                  label="Despesas do mês"
+                  value={
+                    summary
+                      ? currencyFormatter.format(summary.expense_total)
+                      : '—'
+                  }
+                  loading={loading}
+                  variant="negative"
+                />
+              </Grid>
+            </>
+          )}
 
           {!hiddenWidgets.includes('investments') && (
             <Grid size={{ xs: 12, sm: 6, md: 3 }}>
