@@ -227,13 +227,44 @@ export default function InvestmentMovements() {
     }
   }
 
-  // Filter movements
-  const filteredMovements = movements.filter((movement) => {
-    if (filterAssetId && movement.asset_id !== filterAssetId) return false
-    if (filterMovementType && movement.movement_type !== filterMovementType) return false
-    if (filterDateFrom && movement.date < filterDateFrom) return false
-    if (filterDateTo && movement.date > filterDateTo) return false
-    return true
+  // Filter movements, then sort chronologically (oldest first) like a bank
+  // statement, and compute a running balance per asset as we go -- each
+  // row's balance reflects that ticker's own accumulated position after
+  // this movement (a cross-asset running total wouldn't mean anything,
+  // since quantity/cost aren't comparable across different tickers).
+  const filteredMovements = movements
+    .filter((movement) => {
+      if (filterAssetId && movement.asset_id !== filterAssetId) return false
+      if (filterMovementType && movement.movement_type !== filterMovementType) return false
+      if (filterDateFrom && movement.date < filterDateFrom) return false
+      if (filterDateTo && movement.date > filterDateTo) return false
+      return true
+    })
+    .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id)
+
+  // Running balance per asset, in the same order rows are displayed. Mirrors
+  // the backend's cost-basis accumulation (compra adds qty+cost; venda only
+  // reduces qty; bonificação/desdobramento only add qty) so the "Saldo"
+  // column here matches what the portfolio page shows.
+  const runningBalanceByAssetId = new Map<number, { quantity: number; invested: number }>()
+  const extratoRows = filteredMovements.map((movement) => {
+    const running = runningBalanceByAssetId.get(movement.asset_id) ?? { quantity: 0, invested: 0 }
+    if (movement.movement_type === 'compra') {
+      running.quantity += movement.quantity
+      running.invested += movement.total_value
+    } else if (movement.movement_type === 'venda') {
+      const avgPrice = running.quantity > 0 ? running.invested / running.quantity : 0
+      running.quantity -= movement.quantity
+      running.invested = Math.max(0, running.quantity) * avgPrice
+    } else if (movement.movement_type === 'bonificacao' || movement.movement_type === 'desdobramento') {
+      running.quantity += movement.quantity
+    }
+    runningBalanceByAssetId.set(movement.asset_id, running)
+    return {
+      movement,
+      balanceQuantity: running.quantity,
+      balanceInvested: running.invested,
+    }
   })
 
   return (
@@ -335,11 +366,14 @@ export default function InvestmentMovements() {
               </CardContent>
             </Card>
 
-            {/* Movements List */}
+            {/* Extrato (statement) */}
             <Card>
               <CardContent>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-                  Movimentações ({filteredMovements.length})
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5 }}>
+                  Extrato ({filteredMovements.length})
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Ordenado do mais antigo ao mais recente, com saldo acumulado por ativo.
                 </Typography>
                 {filteredMovements.length === 0 ? (
                   <Box sx={{ py: 4, textAlign: 'center', color: 'text.secondary' }}>
@@ -366,13 +400,19 @@ export default function InvestmentMovements() {
                           <TableCell align="right" sx={{ fontWeight: 700 }}>
                             Valor Total
                           </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>
+                            Saldo (qtd.)
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>
+                            Saldo investido
+                          </TableCell>
                           <TableCell align="center" sx={{ fontWeight: 700 }}>
                             Ações
                           </TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {filteredMovements.map((movement) => {
+                        {extratoRows.map(({ movement, balanceQuantity, balanceInvested }) => {
                           const asset = assets.find((a) => a.id === movement.asset_id)
                           return (
                             <TableRow key={movement.id}>
@@ -411,6 +451,19 @@ export default function InvestmentMovements() {
                               <TableCell align="right">
                                 <Typography variant="body2" sx={{ fontWeight: 600 }}>
                                   {currencyFormatter.format(movement.total_value)}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2" color="text.secondary">
+                                  {balanceQuantity.toLocaleString('pt-BR', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2" color="text.secondary">
+                                  {currencyFormatter.format(balanceInvested)}
                                 </Typography>
                               </TableCell>
                               <TableCell align="center">
