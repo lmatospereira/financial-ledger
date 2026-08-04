@@ -10,6 +10,7 @@ import Categories from './pages/Categories'
 import CreditCards from './pages/CreditCards'
 import Goals from './pages/Goals'
 import Investments from './pages/Investments'
+import InvestmentMovements from './pages/InvestmentMovements'
 import Recurring from './pages/Recurring'
 import Reports from './pages/Reports'
 import Users from './pages/Users'
@@ -126,6 +127,14 @@ function App() {
         element={
           <RequireAuth>
             <Investments />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path="/investments/movements"
+        element={
+          <RequireAuth>
+            <InvestmentMovements />
           </RequireAuth>
         }
       />

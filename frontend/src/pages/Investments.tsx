@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import AddIcon from '@mui/icons-material/Add'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
-import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { BarChart } from '@mui/x-charts/BarChart'
+import { LineChart } from '@mui/x-charts/LineChart'
 import { PieChart } from '@mui/x-charts/PieChart'
 import {
   Alert,
@@ -41,6 +42,7 @@ import {
   getApiErrorMessage,
   getAssets,
   getInvestmentMovements,
+  getPositionHistory,
   getPortfolio,
   importInvestmentsFile,
   updateAsset,
@@ -54,6 +56,7 @@ import type {
   ImportPreviewResponse,
   MovementType,
   PortfolioPosition,
+  PositionHistoryEntry,
 } from '../api/types'
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
@@ -61,18 +64,25 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   currency: 'BRL',
 })
 
-const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-})
-
 const assetTypeLabels: Record<AssetType, string> = {
   acao: 'Ação',
   fii: 'FII',
   etf: 'ETF',
   bdr: 'BDR',
+  tesouro: 'Tesouro Direto',
+  renda_fixa: 'Renda Fixa',
   outro: 'Outro',
+}
+
+// Category taxonomy mapping
+const assetTypeToCategory: Record<AssetType, string> = {
+  acao: 'Renda Variável',
+  etf: 'Renda Variável',
+  bdr: 'Renda Variável',
+  fii: 'Fundos Imobiliários',
+  tesouro: 'Tesouro Direto',
+  renda_fixa: 'Renda Fixa',
+  outro: 'Outros',
 }
 
 const movementTypeLabels: Record<string, string> = {
@@ -82,11 +92,6 @@ const movementTypeLabels: Record<string, string> = {
   provento: 'Provento',
   desdobramento: 'Desdobramento',
   outro: 'Outro',
-}
-
-function formatDate(iso: string): string {
-  const [year, month, day] = iso.split('-').map(Number)
-  return dateFormatter.format(new Date(year, month - 1, day))
 }
 
 const emptyMovementForm: InvestmentMovementInput = {
@@ -103,6 +108,7 @@ export default function Investments() {
   const [portfolio, setPortfolio] = useState<PortfolioPosition[]>([])
   const [assets, setAssets] = useState<Asset[]>([])
   const [movements, setMovements] = useState<InvestmentMovement[]>([])
+  const [positionHistory, setPositionHistory] = useState<PositionHistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -139,9 +145,20 @@ export default function Investments() {
   const [priceEditLoading, setPriceEditLoading] = useState(false)
   const [priceEditError, setPriceEditError] = useState<string | null>(null)
 
+  // Edit asset dialog (name and type)
+  const [assetEditDialogOpen, setAssetEditDialogOpen] = useState(false)
+  const [assetEditData, setAssetEditData] = useState<Asset | null>(null)
+  const [assetEditName, setAssetEditName] = useState<string>('')
+  const [assetEditType, setAssetEditType] = useState<AssetType>('acao')
+  const [assetEditLoading, setAssetEditLoading] = useState(false)
+  const [assetEditError, setAssetEditError] = useState<string | null>(null)
+
   // Delete movement dialog
   const [pendingDeleteMovement, setPendingDeleteMovement] = useState<InvestmentMovement | null>(null)
   const [deletingMovement, setDeletingMovement] = useState(false)
+
+  // Composition drill-down
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -149,14 +166,16 @@ export default function Investments() {
     setLoading(true)
     setError(null)
     try {
-      const [portfolioData, assetsData, movementsData] = await Promise.all([
+      const [portfolioData, assetsData, movementsData, historyData] = await Promise.all([
         getPortfolio(),
         getAssets(),
         getInvestmentMovements(),
+        getPositionHistory(),
       ])
       setPortfolio(portfolioData)
       setAssets(assetsData)
       setMovements(movementsData)
+      setPositionHistory(historyData)
     } catch (err) {
       setError(getApiErrorMessage(err))
     } finally {
@@ -173,23 +192,6 @@ export default function Investments() {
     setForm(emptyMovementForm)
     setNewTicker('')
     setNewAssetType('acao')
-    setFormError(null)
-    setFormOpen(true)
-  }
-
-  const openEditForm = (movement: InvestmentMovement) => {
-    const asset = assets.find((a) => a.id === movement.asset_id)
-    setEditingMovement(movement)
-    setForm({
-      asset_id: movement.asset_id,
-      date: movement.date,
-      movement_type: movement.movement_type,
-      quantity: movement.quantity,
-      unit_price: movement.unit_price,
-      total_value: movement.total_value,
-    })
-    setNewTicker(asset?.ticker || '')
-    setNewAssetType(asset?.asset_type || 'acao')
     setFormError(null)
     setFormOpen(true)
   }
@@ -282,6 +284,37 @@ export default function Investments() {
     }
   }
 
+  const openAssetEdit = (asset: Asset) => {
+    setAssetEditData(asset)
+    setAssetEditName(asset.name || '')
+    setAssetEditType(asset.asset_type)
+    setAssetEditError(null)
+    setAssetEditDialogOpen(true)
+  }
+
+  const handleSaveAsset = async () => {
+    if (!assetEditData) return
+
+    setAssetEditError(null)
+
+    setAssetEditLoading(true)
+    try {
+      await updateAsset(assetEditData.id, {
+        ticker: assetEditData.ticker,
+        name: assetEditName.trim() || null,
+        asset_type: assetEditType,
+        current_price: assetEditData.current_price,
+      })
+      await loadData()
+      setAssetEditDialogOpen(false)
+      setAssetEditData(null)
+    } catch (err) {
+      setAssetEditError(getApiErrorMessage(err))
+    } finally {
+      setAssetEditLoading(false)
+    }
+  }
+
   const confirmDeleteMovement = async () => {
     if (!pendingDeleteMovement) return
     setDeletingMovement(true)
@@ -370,16 +403,10 @@ export default function Investments() {
     setImportResult(null)
   }
 
-  // Calculate portfolio composition data for pie chart
-  const compositionData = portfolio
-    .filter((pos) => pos.total_invested > 0)
-    .map((pos) => ({
-      id: pos.ticker,
-      value: pos.total_invested,
-      label: pos.ticker,
-    }))
+  // Calculate total invested across all positions
+  const totalInvestedAllPositions = portfolio.reduce((sum, pos) => sum + pos.total_invested, 0)
 
-  // Calculate profitability report data
+  // Count positions with price
   const positionsWithPrice = portfolio.filter((pos) => pos.current_price !== null)
   const totalInvestedWithPrice = positionsWithPrice.reduce((sum, pos) => sum + pos.total_invested, 0)
   const totalCurrentValue = positionsWithPrice.reduce((sum, pos) => sum + (pos.current_value || 0), 0)
@@ -391,6 +418,41 @@ export default function Investments() {
     invested: pos.total_invested,
     current: pos.current_value || 0,
   }))
+
+  // Calculate composition data by category
+  const categoryCompositionData = Object.entries(
+    portfolio
+      .filter((pos) => pos.total_invested > 0)
+      .reduce(
+        (acc, pos) => {
+          const category = assetTypeToCategory[pos.asset_type as AssetType] || 'Outros'
+          acc[category] = (acc[category] || 0) + pos.total_invested
+          return acc
+        },
+        {} as Record<string, number>,
+      ),
+  ).map(([category, value]) => ({
+    id: category,
+    value,
+    label: category,
+  }))
+
+  // Get positions for selected category
+  const filteredPortfolioByCategory = selectedCategory
+    ? portfolio.filter(
+        (pos) =>
+          assetTypeToCategory[pos.asset_type as AssetType] === selectedCategory &&
+          pos.total_invested > 0,
+      )
+    : []
+
+  // Position history chart data
+  const historyChartData = positionHistory
+    .map((entry) => ({
+      date: entry.date,
+      value: entry.total_invested_value || 0,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date))
 
   return (
     <Layout>
@@ -419,36 +481,157 @@ export default function Investments() {
           </Card>
         ) : (
           <>
-            {/* Composition Chart */}
+            {/* Total Balance Card */}
             <Card>
               <CardContent>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-                  Composição da Carteira
-                </Typography>
-                {compositionData.length === 0 ? (
-                  <Box sx={{ py: 6, textAlign: 'center', color: 'text.secondary' }}>
-                    <Typography variant="body1">
-                      Nenhuma posição com valor investido.
+                <Stack spacing={2}>
+                  <Stack direction="row" spacing={2}>
+                    <Stack sx={{ flex: 1 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Total Investido
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                        {currencyFormatter.format(totalInvestedAllPositions)}
+                      </Typography>
+                    </Stack>
+                    <Stack sx={{ flex: 1 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Valor Atual {positionsWithPrice.length > 0 && `(${positionsWithPrice.length} de ${portfolio.length} ativos)`}
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                        {positionsWithPrice.length > 0
+                          ? currencyFormatter.format(totalCurrentValue)
+                          : '—'}
+                      </Typography>
+                      {positionsWithPrice.length < portfolio.length && (
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                          {portfolio.length - positionsWithPrice.length} sem preço informado
+                        </Typography>
+                      )}
+                    </Stack>
+                  </Stack>
+                </Stack>
+              </CardContent>
+            </Card>
+
+            {/* Composition by Category - Drill Down */}
+            <Card>
+              <CardContent>
+                <Stack spacing={2}>
+                  {selectedCategory && (
+                    <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+                      <IconButton
+                        size="small"
+                        onClick={() => setSelectedCategory(null)}
+                      >
+                        <ArrowBackIcon fontSize="small" />
+                      </IconButton>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                        {selectedCategory}
+                      </Typography>
+                    </Stack>
+                  )}
+                  {!selectedCategory && (
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                      Composição por Categoria
                     </Typography>
-                  </Box>
-                ) : (
-                  <PieChart
-                    height={300}
-                    series={[
-                      {
-                        data: compositionData,
-                        innerRadius: 50,
-                        paddingAngle: 2,
-                        cornerRadius: 4,
-                        valueFormatter: (item: { value: number }) =>
-                          currencyFormatter.format(item.value),
-                      },
-                    ]}
-                    slotProps={{
-                      legend: { direction: 'vertical', position: { vertical: 'middle', horizontal: 'end' } },
-                    }}
-                  />
-                )}
+                  )}
+
+                  {selectedCategory ? (
+                    // Show table of assets in selected category
+                    filteredPortfolioByCategory.length === 0 ? (
+                      <Box sx={{ py: 4, textAlign: 'center', color: 'text.secondary' }}>
+                        <Typography variant="body2">
+                          Nenhum ativo nesta categoria.
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow sx={{ bgcolor: 'action.hover' }}>
+                              <TableCell sx={{ fontWeight: 700 }}>Ticker</TableCell>
+                              <TableCell sx={{ fontWeight: 700 }}>Tipo</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 700 }}>
+                                Total Investido
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 700 }}>
+                                %
+                              </TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {filteredPortfolioByCategory.map((position) => (
+                              <TableRow key={position.ticker}>
+                                <TableCell>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                    {position.ticker}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell>
+                                  <Chip
+                                    label={assetTypeLabels[position.asset_type as AssetType] || position.asset_type}
+                                    size="small"
+                                    variant="outlined"
+                                  />
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Typography variant="body2">
+                                    {currencyFormatter.format(position.total_invested)}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Typography variant="body2">
+                                    {totalInvestedAllPositions > 0
+                                      ? `${((position.total_invested / totalInvestedAllPositions) * 100).toFixed(1)}%`
+                                      : '—'}
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    )
+                  ) : categoryCompositionData.length === 0 ? (
+                    <Box sx={{ py: 6, textAlign: 'center', color: 'text.secondary' }}>
+                      <Typography variant="body1">
+                        Nenhuma posição com valor investido.
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <>
+                      <PieChart
+                        height={300}
+                        series={[
+                          {
+                            data: categoryCompositionData,
+                            innerRadius: 50,
+                            paddingAngle: 2,
+                            cornerRadius: 4,
+                            valueFormatter: (item: { value: number }) =>
+                              currencyFormatter.format(item.value),
+                          },
+                        ]}
+                        slotProps={{
+                          legend: { direction: 'vertical', position: { vertical: 'middle', horizontal: 'end' } },
+                        }}
+                      />
+                      <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap', gap: 1 }}>
+                        {categoryCompositionData.map((category) => (
+                          <Button
+                            key={category.id}
+                            size="small"
+                            variant="outlined"
+                            onClick={() => setSelectedCategory(category.label)}
+                          >
+                            {category.label}
+                          </Button>
+                        ))}
+                      </Stack>
+                    </>
+                  )}
+                </Stack>
               </CardContent>
             </Card>
 
@@ -477,10 +660,15 @@ export default function Investments() {
                     <TableCell align="right" sx={{ fontWeight: 700 }}>
                       Lucro/Prejuízo
                     </TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700 }}>
+                      Ações
+                    </TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {portfolio.map((position) => (
+                  {portfolio.map((position) => {
+                    const asset = assets.find((a) => a.ticker === position.ticker)
+                    return (
                     <TableRow key={position.ticker}>
                       <TableCell>
                         <Stack spacing={0.5}>
@@ -593,8 +781,17 @@ export default function Investments() {
                           )}
                         </Stack>
                       </TableCell>
+                      <TableCell align="center">
+                        <IconButton
+                          size="small"
+                          onClick={() => asset && openAssetEdit(asset)}
+                          title="Editar ativo"
+                        >
+                          <EditOutlinedIcon fontSize="small" />
+                        </IconButton>
+                      </TableCell>
                     </TableRow>
-                  ))}
+                  )})}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -699,105 +896,55 @@ export default function Investments() {
               </Card>
             )}
 
-            {/* Movements List */}
+            {/* Position History Chart */}
+            {historyChartData.length > 0 && (
+              <Card>
+                <CardContent>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                    Evolução do Valor Investido
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
+                    Mostra a evolução do valor total investido (aportes) ao longo do tempo
+                  </Typography>
+                  <LineChart
+                    height={300}
+                    dataset={historyChartData}
+                    xAxis={[{ scaleType: 'band', dataKey: 'date' }]}
+                    series={[
+                      {
+                        dataKey: 'value',
+                        label: 'Valor Investido',
+                        color: theme.palette.primary.main,
+                        valueFormatter: (value: number | null) =>
+                          currencyFormatter.format(value ?? 0),
+                      },
+                    ]}
+                    slotProps={{ legend: { position: { vertical: 'top', horizontal: 'end' } } }}
+                    margin={{ top: 40, bottom: 30 }}
+                  />
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Movements Link Card */}
             <Card>
               <CardContent>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-                  Movimentações
-                </Typography>
-                {movements.length === 0 ? (
-                  <Box sx={{ py: 4, textAlign: 'center', color: 'text.secondary' }}>
-                    <Typography variant="body2">
-                      Nenhuma movimentação registrada.
+                <Stack direction="row" spacing={2} sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Stack>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                      Movimentações
                     </Typography>
-                  </Box>
-                ) : (
-                  <TableContainer>
-                    <Table>
-                      <TableHead>
-                        <TableRow sx={{ bgcolor: 'action.hover' }}>
-                          <TableCell sx={{ fontWeight: 700 }}>Data</TableCell>
-                          <TableCell sx={{ fontWeight: 700 }}>Ticker</TableCell>
-                          <TableCell sx={{ fontWeight: 700 }}>Tipo</TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 700 }}>
-                            Quantidade
-                          </TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 700 }}>
-                            Preço Unitário
-                          </TableCell>
-                          <TableCell align="right" sx={{ fontWeight: 700 }}>
-                            Valor Total
-                          </TableCell>
-                          <TableCell align="center" sx={{ fontWeight: 700 }}>
-                            Ações
-                          </TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {movements.map((movement) => {
-                          const asset = assets.find((a) => a.id === movement.asset_id)
-                          return (
-                            <TableRow key={movement.id}>
-                              <TableCell>
-                                <Typography variant="body2">
-                                  {formatDate(movement.date)}
-                                </Typography>
-                              </TableCell>
-                              <TableCell>
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                  {asset?.ticker || '—'}
-                                </Typography>
-                              </TableCell>
-                              <TableCell>
-                                <Chip
-                                  label={movementTypeLabels[movement.movement_type] || movement.movement_type}
-                                  size="small"
-                                  variant="outlined"
-                                />
-                              </TableCell>
-                              <TableCell align="right">
-                                <Typography variant="body2">
-                                  {movement.quantity.toLocaleString('pt-BR', {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="right">
-                                <Typography variant="body2">
-                                  {movement.unit_price !== null
-                                    ? currencyFormatter.format(movement.unit_price)
-                                    : '—'}
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="right">
-                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                                  {currencyFormatter.format(movement.total_value)}
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="center">
-                                <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center' }}>
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => openEditForm(movement)}
-                                  >
-                                    <EditOutlinedIcon fontSize="small" />
-                                  </IconButton>
-                                  <IconButton
-                                    size="small"
-                                    onClick={() => setPendingDeleteMovement(movement)}
-                                  >
-                                    <DeleteOutlineIcon fontSize="small" />
-                                  </IconButton>
-                                </Stack>
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                )}
+                    <Typography variant="body2" color="text.secondary">
+                      {movements.length} movimentação{movements.length !== 1 ? 's' : ''}
+                    </Typography>
+                  </Stack>
+                  <Button
+                    variant="contained"
+                    onClick={() => window.location.href = '/investments/movements'}
+                  >
+                    Ver todas
+                  </Button>
+                </Stack>
               </CardContent>
             </Card>
           </>
@@ -991,6 +1138,54 @@ export default function Investments() {
             Cancelar
           </Button>
           <Button variant="contained" onClick={handleSavePrice} disabled={priceEditLoading}>
+            Salvar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Asset Dialog */}
+      <Dialog open={assetEditDialogOpen} onClose={() => setAssetEditDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Editar Ativo</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2.5} sx={{ mt: 1 }}>
+            {assetEditError && <Alert severity="error">{assetEditError}</Alert>}
+
+            <TextField
+              label="Ticker"
+              value={assetEditData?.ticker || ''}
+              disabled
+              fullWidth
+              variant="outlined"
+            />
+
+            <TextField
+              label="Nome (opcional)"
+              value={assetEditName}
+              onChange={(e) => setAssetEditName(e.target.value)}
+              fullWidth
+              placeholder="Ex: Petrobras"
+            />
+
+            <TextField
+              select
+              label="Tipo de ativo"
+              value={assetEditType}
+              onChange={(e) => setAssetEditType(e.target.value as AssetType)}
+              fullWidth
+            >
+              {Object.entries(assetTypeLabels).map(([key, label]) => (
+                <MenuItem key={key} value={key}>
+                  {label}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setAssetEditDialogOpen(false)} disabled={assetEditLoading}>
+            Cancelar
+          </Button>
+          <Button variant="contained" onClick={handleSaveAsset} disabled={assetEditLoading}>
             Salvar
           </Button>
         </DialogActions>
