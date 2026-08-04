@@ -5,6 +5,10 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
 import RepeatIcon from '@mui/icons-material/Repeat'
 import CreditCardIcon from '@mui/icons-material/CreditCard'
 import TuneIcon from '@mui/icons-material/Tune'
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import {
   Alert,
   Box,
@@ -19,6 +23,7 @@ import {
   DialogTitle,
   Fab,
   FormControlLabel,
+  Grid,
   IconButton,
   List,
   ListItem,
@@ -29,9 +34,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
-import BalanceCard from '../components/BalanceCard'
 import Layout from '../components/Layout'
 import MonthSelector from '../components/MonthSelector'
+import StatCard from '../components/StatCard'
 import TransactionForm from '../components/TransactionForm'
 import TransactionList from '../components/TransactionList'
 import TransferDialog from '../components/TransferDialog'
@@ -43,13 +48,14 @@ import {
   getApiErrorMessage,
   getCategories,
   getCurrentUser,
+  getPortfolio,
   getUpcomingAlerts,
   getSummary,
   getTransactions,
   updateDashboardPreferences,
   updateTransaction,
 } from '../api/client'
-import type { Account, Category, Summary, Transaction, TransactionInput, UpcomingAlert } from '../api/types'
+import type { Account, Category, PortfolioPosition, Summary, Transaction, TransactionInput, UpcomingAlert } from '../api/types'
 
 function currentPeriod(): { month: number; year: number } {
   const now = new Date()
@@ -95,6 +101,7 @@ export default function Dashboard() {
   const [categories, setCategories] = useState<Category[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
   const [upcomingAlerts, setUpcomingAlerts] = useState<UpcomingAlert[]>([])
+  const [portfolio, setPortfolio] = useState<PortfolioPosition[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -116,19 +123,21 @@ export default function Dashboard() {
     setError(null)
     try {
       const accountId = accountFilter === '' ? undefined : accountFilter
-      const [transactionsData, categoriesData, summaryData, accountsData, alertsData] =
+      const [transactionsData, categoriesData, summaryData, accountsData, alertsData, portfolioData] =
         await Promise.all([
           getTransactions(month, year, accountId),
           getCategories(),
           getSummary(month, year, accountId),
           getAccounts(),
           getUpcomingAlerts(7),
+          getPortfolio().catch(() => []),
         ])
       setTransactions(transactionsData)
       setCategories(categoriesData)
       setSummary(summaryData)
       setAccounts(accountsData)
       setUpcomingAlerts(alertsData)
+      setPortfolio(portfolioData)
     } catch (err) {
       setError(getApiErrorMessage(err))
     } finally {
@@ -228,6 +237,8 @@ export default function Dashboard() {
     return result
   }, [transactions, activeCategoryId, statusFilter])
 
+  const totalInvested = portfolio.reduce((sum, pos) => sum + pos.total_invested, 0)
+
   return (
     <Layout>
       <Stack spacing={3}>
@@ -244,193 +255,274 @@ export default function Dashboard() {
 
         {error && <Alert severity="error">{error}</Alert>}
 
-        {!hiddenWidgets.includes('balance') && (
-          <BalanceCard summary={summary} loading={loading} />
-        )}
+        {/* KPI Stats Row */}
+        <Grid container spacing={2}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <StatCard
+              icon={<AccountBalanceWalletIcon />}
+              label="Saldo atual"
+              value={
+                summary
+                  ? currencyFormatter.format(summary.balance)
+                  : '—'
+              }
+              loading={loading}
+              variant={summary && summary.balance >= 0 ? 'positive' : 'negative'}
+            />
+          </Grid>
 
-        {!hiddenWidgets.includes('alerts') && upcomingAlerts.length > 0 && (
-          <Card>
-            <Box sx={{ px: 2, pt: 2 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                Próximos vencimentos (7 dias)
-              </Typography>
-            </Box>
-            <List disablePadding>
-              {upcomingAlerts.slice(0, 5).map((alert) => {
-                const daysUntilDue = getDaysUntilDue(alert.due_date)
-                return (
-                  <ListItem
-                    key={`${alert.kind}-${alert.id}`}
-                    sx={{
-                      py: 1.5,
-                      px: 2,
-                      borderTop: '1px solid',
-                      borderColor: 'divider',
-                      '&:first-of-type': {
-                        borderTop: 'none',
-                      },
-                    }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 36 }}>
-                      <Box
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <StatCard
+              icon={<ArrowUpwardIcon />}
+              label="Receitas do mês"
+              value={
+                summary
+                  ? currencyFormatter.format(summary.income_total)
+                  : '—'
+              }
+              loading={loading}
+              variant="positive"
+            />
+          </Grid>
+
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+            <StatCard
+              icon={<ArrowDownwardIcon />}
+              label="Despesas do mês"
+              value={
+                summary
+                  ? currencyFormatter.format(summary.expense_total)
+                  : '—'
+              }
+              loading={loading}
+              variant="negative"
+            />
+          </Grid>
+
+          {!hiddenWidgets.includes('investments') && (
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+              <StatCard
+                icon={<TrendingUpIcon />}
+                label="Total investido"
+                value={
+                  portfolio.length > 0
+                    ? currencyFormatter.format(totalInvested)
+                    : 'Nenhum investimento'
+                }
+                loading={loading}
+                variant="positive"
+              />
+            </Grid>
+          )}
+        </Grid>
+
+        {/* Widget Grid */}
+        <Grid container spacing={3}>
+          {/* Alerts Widget */}
+          {!hiddenWidgets.includes('alerts') && upcomingAlerts.length > 0 && (
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Card>
+                <Box sx={{ px: 2, pt: 2 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                    Próximos vencimentos (7 dias)
+                  </Typography>
+                </Box>
+                <List disablePadding>
+                  {upcomingAlerts.slice(0, 5).map((alert) => {
+                    const daysUntilDue = getDaysUntilDue(alert.due_date)
+                    return (
+                      <ListItem
+                        key={`${alert.kind}-${alert.id}`}
                         sx={{
-                          color: alert.is_overdue ? 'error.main' : 'text.secondary',
+                          py: 1.5,
+                          px: 2,
+                          borderTop: '1px solid',
+                          borderColor: 'divider',
+                          '&:first-of-type': {
+                            borderTop: 'none',
+                          },
                         }}
                       >
-                        {getAlertKindIcon(alert.kind)}
-                      </Box>
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={alert.description}
-                      secondary={
-                        <Stack spacing={0.5} direction="row" sx={{ alignItems: 'center', mt: 0.5 }}>
-                          <Chip
-                            label={formatRelativeDueDate(daysUntilDue)}
-                            size="small"
-                            variant="outlined"
-                            color={alert.is_overdue ? 'error' : 'default'}
-                            sx={{ height: 20, fontSize: 11 }}
-                          />
-                          {alert.account && (
-                            <Chip
-                              label={alert.account.name}
-                              size="small"
-                              sx={{
-                                bgcolor: alert.account.color,
-                                color: 'white',
-                                height: 20,
-                                fontSize: 11,
-                              }}
-                            />
-                          )}
-                        </Stack>
-                      }
-                    />
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        fontWeight: 600,
-                        color: alert.is_overdue ? 'error.main' : 'text.primary',
-                        minWidth: 'fit-content',
-                        ml: 2,
-                      }}
-                    >
-                      {currencyFormatter.format(alert.amount)}
+                        <ListItemIcon sx={{ minWidth: 36 }}>
+                          <Box
+                            sx={{
+                              color: alert.is_overdue ? 'error.main' : 'text.secondary',
+                            }}
+                          >
+                            {getAlertKindIcon(alert.kind)}
+                          </Box>
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={alert.description}
+                          secondary={
+                            <Stack spacing={0.5} direction="row" sx={{ alignItems: 'center', mt: 0.5 }}>
+                              <Chip
+                                label={formatRelativeDueDate(daysUntilDue)}
+                                size="small"
+                                variant="outlined"
+                                color={alert.is_overdue ? 'error' : 'default'}
+                                sx={{ height: 20, fontSize: 11 }}
+                              />
+                              {alert.account && (
+                                <Chip
+                                  label={alert.account.name}
+                                  size="small"
+                                  sx={{
+                                    bgcolor: alert.account.color,
+                                    color: 'white',
+                                    height: 20,
+                                    fontSize: 11,
+                                  }}
+                                />
+                              )}
+                            </Stack>
+                          }
+                        />
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: 600,
+                            color: alert.is_overdue ? 'error.main' : 'text.primary',
+                            minWidth: 'fit-content',
+                            ml: 2,
+                          }}
+                        >
+                          {currencyFormatter.format(alert.amount)}
+                        </Typography>
+                      </ListItem>
+                    )
+                  })}
+                </List>
+                {upcomingAlerts.length > 5 && (
+                  <Box sx={{ px: 2, py: 1, textAlign: 'center', borderTop: '1px solid', borderColor: 'divider' }}>
+                    <Typography variant="caption" color="text.secondary">
+                      +{upcomingAlerts.length - 5} outros vencimentos
                     </Typography>
-                  </ListItem>
-                )
-              })}
-            </List>
-            {upcomingAlerts.length > 5 && (
-              <Box sx={{ px: 2, py: 1, textAlign: 'center', borderTop: '1px solid', borderColor: 'divider' }}>
-                <Typography variant="caption" color="text.secondary">
-                  +{upcomingAlerts.length - 5} outros vencimentos
+                  </Box>
+                )}
+              </Card>
+            </Grid>
+          )}
+
+          {/* Filters Widget */}
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Card>
+              <Box sx={{ px: 2, pt: 2 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Filtros
                 </Typography>
               </Box>
-            )}
-          </Card>
-        )}
+              <Box sx={{ px: 2, pt: 1, pb: 2 }}>
+                <Stack spacing={2}>
+                  <TextField
+                    select
+                    size="small"
+                    label="Conta"
+                    value={accountFilter}
+                    onChange={(e) =>
+                      setAccountFilter(e.target.value === '' ? '' : Number(e.target.value))
+                    }
+                    fullWidth
+                  >
+                    <MenuItem value="">
+                      <em>Todas as contas</em>
+                    </MenuItem>
+                    {accounts.map((account) => (
+                      <MenuItem key={account.id} value={account.id}>
+                        {account.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
 
-        <Stack
-          direction={{ xs: 'column', sm: 'row' }}
-          spacing={2}
-          sx={{ alignItems: { sm: 'center' }, justifyContent: 'space-between' }}
-        >
-          <TextField
-            select
-            size="small"
-            label="Conta"
-            value={accountFilter}
-            onChange={(e) =>
-              setAccountFilter(e.target.value === '' ? '' : Number(e.target.value))
-            }
-            sx={{ minWidth: 220 }}
-          >
-            <MenuItem value="">
-              <em>Todas as contas</em>
-            </MenuItem>
-            {accounts.map((account) => (
-              <MenuItem key={account.id} value={account.id}>
-                {account.name}
-              </MenuItem>
-            ))}
-          </TextField>
+                  <Button
+                    variant="outlined"
+                    startIcon={<SwapHorizIcon />}
+                    onClick={() => setTransferOpen(true)}
+                    disabled={accounts.length < 2}
+                    fullWidth
+                  >
+                    Nova transferência
+                  </Button>
+                </Stack>
+              </Box>
+            </Card>
+          </Grid>
 
-          <Button
-            variant="outlined"
-            startIcon={<SwapHorizIcon />}
-            onClick={() => setTransferOpen(true)}
-            disabled={accounts.length < 2}
-          >
-            Nova transferência
-          </Button>
-        </Stack>
+          {/* Transaction List - Full Width */}
+          <Grid size={{ xs: 12 }}>
+            <Card>
+              <Box sx={{ px: 2, pt: 2 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  Lançamentos
+                </Typography>
+              </Box>
 
-        {categories.length > 0 && (
-          <Stack spacing={2}>
-            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-              <Chip
-                label="Todas"
-                color={activeCategoryId === null ? 'primary' : 'default'}
-                onClick={() => setActiveCategoryId(null)}
-              />
-              {categories.map((category) => (
-                <Chip
-                  key={category.id}
-                  label={category.name}
-                  onClick={() => setActiveCategoryId(category.id)}
-                  sx={{
-                    bgcolor: activeCategoryId === category.id ? category.color : undefined,
-                    color: activeCategoryId === category.id ? 'white' : undefined,
-                    borderColor: category.color,
-                  }}
-                  variant={activeCategoryId === category.id ? 'filled' : 'outlined'}
+              {/* Category Filters */}
+              {categories.length > 0 && (
+                <Box sx={{ px: 2, py: 1 }}>
+                  <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                    <Chip
+                      label="Todas"
+                      color={activeCategoryId === null ? 'primary' : 'default'}
+                      onClick={() => setActiveCategoryId(null)}
+                    />
+                    {categories.map((category) => (
+                      <Chip
+                        key={category.id}
+                        label={category.name}
+                        onClick={() => setActiveCategoryId(category.id)}
+                        sx={{
+                          bgcolor: activeCategoryId === category.id ? category.color : undefined,
+                          color: activeCategoryId === category.id ? 'white' : undefined,
+                          borderColor: category.color,
+                        }}
+                        variant={activeCategoryId === category.id ? 'filled' : 'outlined'}
+                      />
+                    ))}
+                  </Stack>
+                </Box>
+              )}
+
+              {/* Status Filters */}
+              <Box sx={{ px: 2, py: 1 }}>
+                <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+                  <Chip
+                    label="Todas"
+                    color={statusFilter === 'all' ? 'primary' : 'default'}
+                    onClick={() => setStatusFilter('all')}
+                  />
+                  <Chip
+                    label="Pendentes"
+                    color={statusFilter === 'pending' ? 'warning' : 'default'}
+                    onClick={() => setStatusFilter('pending')}
+                    variant={statusFilter === 'pending' ? 'filled' : 'outlined'}
+                  />
+                  <Chip
+                    label="Confirmadas"
+                    color={statusFilter === 'confirmed' ? 'success' : 'default'}
+                    onClick={() => setStatusFilter('confirmed')}
+                    variant={statusFilter === 'confirmed' ? 'filled' : 'outlined'}
+                  />
+                </Stack>
+              </Box>
+
+              {/* Transaction List */}
+              {loading ? (
+                <Box sx={{ py: 8, display: 'flex', justifyContent: 'center' }}>
+                  <CircularProgress />
+                </Box>
+              ) : (
+                <TransactionList
+                  transactions={filteredTransactions}
+                  accounts={accounts}
+                  onEdit={openEditForm}
+                  onDelete={handleDelete}
+                  onConfirm={handleConfirm}
                 />
-              ))}
-            </Stack>
-          </Stack>
-        )}
-
-        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-          <Chip
-            label="Todas"
-            color={statusFilter === 'all' ? 'primary' : 'default'}
-            onClick={() => setStatusFilter('all')}
-          />
-          <Chip
-            label="Pendentes"
-            color={statusFilter === 'pending' ? 'warning' : 'default'}
-            onClick={() => setStatusFilter('pending')}
-            variant={statusFilter === 'pending' ? 'filled' : 'outlined'}
-          />
-          <Chip
-            label="Confirmadas"
-            color={statusFilter === 'confirmed' ? 'success' : 'default'}
-            onClick={() => setStatusFilter('confirmed')}
-            variant={statusFilter === 'confirmed' ? 'filled' : 'outlined'}
-          />
-        </Stack>
-
-        <Card>
-          <Box sx={{ px: 2, pt: 2 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-              Lançamentos
-            </Typography>
-          </Box>
-          {loading ? (
-            <Box sx={{ py: 8, display: 'flex', justifyContent: 'center' }}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <TransactionList
-              transactions={filteredTransactions}
-              accounts={accounts}
-              onEdit={openEditForm}
-              onDelete={handleDelete}
-              onConfirm={handleConfirm}
-            />
-          )}
-        </Card>
+              )}
+            </Card>
+          </Grid>
+        </Grid>
       </Stack>
 
       <Fab
@@ -487,6 +579,15 @@ export default function Dashboard() {
                 />
               }
               label="Mostrar próximos vencimentos"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={!draftHiddenWidgets.includes('investments')}
+                  onChange={() => toggleDraftWidget('investments')}
+                />
+              }
+              label="Mostrar total investido"
             />
           </Stack>
         </DialogContent>
