@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import AddIcon from '@mui/icons-material/Add'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
@@ -105,6 +106,7 @@ const emptyMovementForm: InvestmentMovementInput = {
 
 export default function Investments() {
   const theme = useTheme()
+  const navigate = useNavigate()
   const [portfolio, setPortfolio] = useState<PortfolioPosition[]>([])
   const [assets, setAssets] = useState<Asset[]>([])
   const [movements, setMovements] = useState<InvestmentMovement[]>([])
@@ -940,7 +942,7 @@ export default function Investments() {
                   </Stack>
                   <Button
                     variant="contained"
-                    onClick={() => window.location.href = '/investments/movements'}
+                    onClick={() => navigate('/investments/movements')}
                   >
                     Ver todas
                   </Button>
