@@ -255,3 +255,56 @@ export interface CreditCardInvoice {
   total: number
   transactions: Transaction[]
 }
+
+// ---------- Investments ----------
+export type AssetType = 'acao' | 'fii' | 'etf' | 'bdr' | 'outro'
+
+export type MovementType = 'compra' | 'venda' | 'bonificacao' | 'provento' | 'desdobramento' | 'outro'
+
+export interface Asset {
+  id: number
+  ticker: string
+  name: string | null
+  asset_type: AssetType
+  created_at: string
+}
+
+export type AssetInput = Omit<Asset, 'id' | 'created_at'>
+
+export interface InvestmentMovement {
+  id: number
+  asset_id: number
+  date: string // ISO date
+  movement_type: MovementType
+  quantity: number
+  unit_price: number | null
+  total_value: number
+  created_at: string
+}
+
+export type InvestmentMovementInput = Omit<InvestmentMovement, 'id' | 'created_at'>
+
+export interface PortfolioPosition {
+  ticker: string
+  name: string | null
+  asset_type: string
+  quantity_held: number
+  avg_price: number
+  total_invested: number
+}
+
+export interface ImportPreviewResponse {
+  committed: false
+  raw_columns: string[]
+  detected_mapping: Record<string, string | null>
+  sample_rows: Record<string, string>[]
+  row_count: number
+}
+
+export interface ImportCommitResponse {
+  committed: true
+  assets_created: number
+  movements_created: number
+}
+
+export type ImportResponse = ImportPreviewResponse | ImportCommitResponse

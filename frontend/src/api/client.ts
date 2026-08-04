@@ -3,6 +3,8 @@ import type {
   Account,
   AccountInput,
   ApiError,
+  Asset,
+  AssetInput,
   Bill,
   BillInput,
   BillPayRequest,
@@ -17,9 +19,13 @@ import type {
   CurrentUser,
   Goal,
   GoalInput,
+  ImportResponse,
+  InvestmentMovement,
+  InvestmentMovementInput,
   LoginRequest,
   LoginResponse,
   MonthlyTrendEntry,
+  PortfolioPosition,
   RecurringTransaction,
   RecurringTransactionInput,
   RecurringTransactionUpdate,
@@ -387,6 +393,74 @@ export async function getCreditCardInvoice(
       params: { month, year },
     },
   )
+  return data
+}
+
+export async function getAssets(): Promise<Asset[]> {
+  const { data } = await api.get<Asset[]>('/investments/assets')
+  return data
+}
+
+export async function createAsset(payload: AssetInput): Promise<Asset> {
+  const { data } = await api.post<Asset>('/investments/assets', payload)
+  return data
+}
+
+export async function updateAsset(id: number, payload: AssetInput): Promise<Asset> {
+  const { data } = await api.put<Asset>(`/investments/assets/${id}`, payload)
+  return data
+}
+
+export async function deleteAsset(id: number): Promise<void> {
+  await api.delete(`/investments/assets/${id}`)
+}
+
+export async function getInvestmentMovements(): Promise<InvestmentMovement[]> {
+  const { data } = await api.get<InvestmentMovement[]>('/investments/movements')
+  return data
+}
+
+export async function createInvestmentMovement(
+  payload: InvestmentMovementInput,
+): Promise<InvestmentMovement> {
+  const { data } = await api.post<InvestmentMovement>('/investments/movements', payload)
+  return data
+}
+
+export async function updateInvestmentMovement(
+  id: number,
+  payload: InvestmentMovementInput,
+): Promise<InvestmentMovement> {
+  const { data } = await api.put<InvestmentMovement>(
+    `/investments/movements/${id}`,
+    payload,
+  )
+  return data
+}
+
+export async function deleteInvestmentMovement(id: number): Promise<void> {
+  await api.delete(`/investments/movements/${id}`)
+}
+
+export async function getPortfolio(): Promise<PortfolioPosition[]> {
+  const { data } = await api.get<PortfolioPosition[]>('/investments/portfolio')
+  return data
+}
+
+export async function importInvestmentsFile(
+  file: File,
+  columnMapping?: Record<string, string>,
+): Promise<ImportResponse> {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (columnMapping) {
+    formData.append('column_mapping', JSON.stringify(columnMapping))
+  }
+  const { data } = await api.post<ImportResponse>('/investments/import', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  })
   return data
 }
 
