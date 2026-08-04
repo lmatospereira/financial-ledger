@@ -1058,22 +1058,23 @@ def get_position_snapshots_for_user(
     )
 
 
-def _compute_position_at_date(movements: list[models.InvestmentMovement], as_of_date: date) -> tuple[float, float]:
-    """Helper to compute (quantity_held, invested_value) as of a specific date.
+def _aggregate_investment_movements(
+    movements: list[models.InvestmentMovement],
+) -> tuple[float, float]:
+    """Aggregate a list of movements into (quantity_held, invested_value).
 
-    Replays movements up to and including as_of_date, applying the same cost-basis
-    logic as get_portfolio (weighted average of purchases only).
-
-    Returns (quantity_held, invested_value).
+    Cost basis is a simple weighted average of "compra" prices only (an MVP
+    simplification that deliberately avoids full FIFO/tax-lot accounting --
+    see get_portfolio's docstring). This is the single source of truth for
+    that math: get_portfolio (current position) and _compute_position_at_date
+    (historical position, via a date-filtered movement list) both call this,
+    so the two can never silently diverge.
     """
     quantity_held = 0.0
     total_cost = 0.0
     total_bought = 0.0
 
     for movement in movements:
-        if movement.date > as_of_date:
-            break
-
         if movement.movement_type == "compra":
             quantity_held += movement.quantity
             total_cost += movement.total_value
@@ -1083,11 +1084,26 @@ def _compute_position_at_date(movements: list[models.InvestmentMovement], as_of_
         elif movement.movement_type in ("bonificacao", "desdobramento"):
             quantity_held += movement.quantity
 
-    # Calculate weighted average price of purchases only
     avg_price = total_cost / total_bought if total_bought > 0 else 0.0
     invested_value = quantity_held * avg_price
 
     return quantity_held, invested_value
+
+
+def _compute_position_at_date(movements: list[models.InvestmentMovement], as_of_date: date) -> tuple[float, float]:
+    """Helper to compute (quantity_held, invested_value) as of a specific date.
+
+    Replays movements up to and including as_of_date (movements must already
+    be sorted ascending by date -- get_investment_movements_by_asset does
+    this), then applies the shared cost-basis aggregation.
+    """
+    relevant = []
+    for movement in movements:
+        if movement.date > as_of_date:
+            break
+        relevant.append(movement)
+
+    return _aggregate_investment_movements(relevant)
 
 
 def rebuild_position_snapshots(
@@ -1163,29 +1179,13 @@ def get_portfolio(db: Session, user_id: int) -> list[schemas.PortfolioPositionOu
 
     for asset in assets:
         movements = get_investment_movements_by_asset(db, asset.id, user_id)
-
-        # Aggregate movements
-        quantity_held = 0.0
-        total_cost = 0.0
-        total_bought = 0.0
-
-        for movement in movements:
-            if movement.movement_type == "compra":
-                quantity_held += movement.quantity
-                total_cost += movement.total_value
-                total_bought += movement.quantity
-            elif movement.movement_type == "venda":
-                quantity_held -= movement.quantity
-            elif movement.movement_type in ("bonificacao", "desdobramento"):
-                quantity_held += movement.quantity
+        quantity_held, total_invested = _aggregate_investment_movements(movements)
 
         # Skip positions fully sold
         if quantity_held <= 0:
             continue
 
-        # Calculate weighted average price of purchases only
-        avg_price = total_cost / total_bought if total_bought > 0 else 0.0
-        total_invested = quantity_held * avg_price
+        avg_price = total_invested / quantity_held
 
         # Profitability only computable when the user has manually kept
         # current_price up to date (no live price feed exists yet).
