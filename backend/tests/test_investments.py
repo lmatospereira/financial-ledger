@@ -446,6 +446,7 @@ def test_import_real_b3_format(client, auth_headers):
     preview = response.json()
     assert preview["detected_mapping"]["direction"] == "Entrada/Saída"
     assert preview["detected_mapping"]["ticker"] == "Produto"
+    assert preview["is_known_b3_format"] is True
 
     response = client.post(
         "/api/investments/import",
@@ -498,6 +499,20 @@ def test_import_guesses_asset_type_from_ticker(client, auth_headers):
     assert assets_by_ticker["HGLG11"]["asset_type"] == "fii"
     assert assets_by_ticker["AAPL34"]["asset_type"] == "bdr"
     assert assets_by_ticker["B3SA3"]["asset_type"] == "acao"
+
+
+def test_import_known_b3_format_false_for_other_layouts(client, auth_headers):
+    """is_known_b3_format is only true for an exact match of B3's own
+    export headers -- a different (even if fully mappable) layout should
+    still go through the manual column-review step in the UI.
+    """
+    csv_content = "Data da Operação,Produto,Movimentação,Quantidade,Preço Unitário,Valor Total\n2026-01-15,PETR4,Compra,100,50.00,5000.00"
+    response = client.post(
+        "/api/investments/import",
+        files={"file": ("test.csv", csv_content.encode(), "text/csv")},
+        headers=auth_headers,
+    )
+    assert response.json()["is_known_b3_format"] is False
 
 
 def test_import_normalize_movement_types(client, auth_headers):

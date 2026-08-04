@@ -504,6 +504,10 @@ class ImportPreviewResponse(BaseModel):
     detected_mapping: dict[str, Optional[str]]
     sample_rows: list[dict[str, Optional[str]]]
     row_count: int
+    # True when the file's header row matches B3's own "Movimentação" export
+    # exactly -- lets the frontend skip the manual column-review step and
+    # go straight to a one-click confirmation instead.
+    is_known_b3_format: bool = False
 
 
 # ---------- Import Commit Response ----------

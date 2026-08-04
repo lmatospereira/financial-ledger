@@ -125,6 +125,7 @@ export default function Investments() {
   const [importColumnMapping, setImportColumnMapping] = useState<Record<string, string | null>>(
     {},
   )
+  const [showManualMapping, setShowManualMapping] = useState(false)
   const [importError, setImportError] = useState<string | null>(null)
   const [importLoading, setImportLoading] = useState(false)
   const [importResult, setImportResult] = useState<{
@@ -301,6 +302,7 @@ export default function Investments() {
 
     setImportFile(file)
     setImportColumnMapping({})
+    setShowManualMapping(false)
     setImportError(null)
     setImportStep('preview')
 
@@ -311,6 +313,10 @@ export default function Investments() {
       if (response.committed === false) {
         setImportPreview(response)
         setImportColumnMapping(response.detected_mapping || {})
+        // Known B3 layout: the mapping is certain, so default to the
+        // one-click confirmation instead of asking the user to review
+        // every column -- they can still expand it manually if they want.
+        setShowManualMapping(!response.is_known_b3_format)
       }
     } catch (err) {
       setImportError(getApiErrorMessage(err))
@@ -359,6 +365,7 @@ export default function Investments() {
     setImportFile(null)
     setImportPreview(null)
     setImportColumnMapping({})
+    setShowManualMapping(false)
     setImportError(null)
     setImportResult(null)
   }
@@ -1046,47 +1053,70 @@ export default function Investments() {
             <Stack spacing={2.5} sx={{ mt: 1 }}>
               {importError && <Alert severity="error">{importError}</Alert>}
 
-              <Typography variant="body2" color="text.secondary">
-                Confira o mapeamento de colunas antes de importar.
-              </Typography>
-
-              <Box>
-                <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
-                  Total de linhas: {importPreview.row_count}
+              {importPreview.is_known_b3_format ? (
+                <Alert severity="success">
+                  Formato oficial da B3 (Movimentação) reconhecido — {importPreview.row_count}{' '}
+                  {importPreview.row_count === 1 ? 'linha pronta' : 'linhas prontas'} para importar.
+                </Alert>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Confira o mapeamento de colunas antes de importar.
                 </Typography>
-              </Box>
+              )}
 
-              <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2 }}>
-                Mapeamento de colunas
-              </Typography>
+              {!importPreview.is_known_b3_format && (
+                <Box>
+                  <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 1 }}>
+                    Total de linhas: {importPreview.row_count}
+                  </Typography>
+                </Box>
+              )}
 
-              <Stack spacing={1.5}>
-                {['date', 'movement_type', 'ticker', 'quantity', 'unit_price', 'total_value'].map(
-                  (field) => (
-                    <TextField
-                      key={field}
-                      select
-                      label={field}
-                      value={importColumnMapping[field] || ''}
-                      onChange={(e) =>
-                        setImportColumnMapping((prev) => ({
-                          ...prev,
-                          [field]: e.target.value,
-                        }))
-                      }
-                      fullWidth
-                      size="small"
-                    >
-                      <MenuItem value="">— Não mapeado —</MenuItem>
-                      {importPreview.raw_columns.map((col) => (
-                        <MenuItem key={col} value={col}>
-                          {col}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  ),
-                )}
-              </Stack>
+              {importPreview.is_known_b3_format && !showManualMapping && (
+                <Button
+                  size="small"
+                  onClick={() => setShowManualMapping(true)}
+                  sx={{ alignSelf: 'flex-start' }}
+                >
+                  Ajustar mapeamento manualmente
+                </Button>
+              )}
+
+              {showManualMapping && (
+                <>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mt: 2 }}>
+                    Mapeamento de colunas
+                  </Typography>
+
+                  <Stack spacing={1.5}>
+                    {['date', 'movement_type', 'ticker', 'quantity', 'unit_price', 'total_value'].map(
+                      (field) => (
+                        <TextField
+                          key={field}
+                          select
+                          label={field}
+                          value={importColumnMapping[field] || ''}
+                          onChange={(e) =>
+                            setImportColumnMapping((prev) => ({
+                              ...prev,
+                              [field]: e.target.value,
+                            }))
+                          }
+                          fullWidth
+                          size="small"
+                        >
+                          <MenuItem value="">— Não mapeado —</MenuItem>
+                          {importPreview.raw_columns.map((col) => (
+                            <MenuItem key={col} value={col}>
+                              {col}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                      ),
+                    )}
+                  </Stack>
+                </>
+              )}
 
               {importPreview.sample_rows.length > 0 && (
                 <Box sx={{ mt: 2 }}>
