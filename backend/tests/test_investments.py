@@ -224,6 +224,64 @@ def test_portfolio_buy_then_sell_partial(client, auth_headers):
     assert position["total_invested"] == 3500.0  # 70 * 50
 
 
+def test_portfolio_profitability_with_current_price(client, auth_headers):
+    """When an asset's current_price is set, the portfolio reports current
+    value and profit/loss; when unset, those fields stay null (no live price
+    feed exists, so profitability is only knowable once the user maintains
+    current_price manually).
+    """
+    asset = make_asset(client, auth_headers, ticker="PROF1").json()
+    make_movement(
+        client, auth_headers, asset["id"], quantity=10.0, unit_price=10.0, total_value=100.0
+    )
+
+    response = client.get("/api/investments/portfolio", headers=auth_headers)
+    position = response.json()[0]
+    assert position["current_price"] is None
+    assert position["current_value"] is None
+    assert position["profit_loss"] is None
+    assert position["profit_loss_pct"] is None
+
+    update_response = client.put(
+        f"/api/investments/assets/{asset['id']}",
+        json={"current_price": 15.0},
+        headers=auth_headers,
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["current_price"] == 15.0
+
+    response = client.get("/api/investments/portfolio", headers=auth_headers)
+    position = response.json()[0]
+    assert position["current_price"] == 15.0
+    assert position["current_value"] == 150.0  # 10 * 15
+    assert position["profit_loss"] == 50.0  # 150 - 100
+    assert position["profit_loss_pct"] == 50.0  # 50/100 * 100
+
+
+def test_asset_current_price_can_be_cleared(client, auth_headers):
+    """Setting current_price to null via update actually clears it.
+
+    Regression test: crud.update_asset used to build the update dict with
+    exclude_none=True, which silently dropped an explicit `current_price:
+    null` instead of applying it, so "clearing" a price in the UI was a
+    no-op.
+    """
+    asset = make_asset(client, auth_headers, ticker="CLR1").json()
+    client.put(
+        f"/api/investments/assets/{asset['id']}",
+        json={"current_price": 42.0},
+        headers=auth_headers,
+    )
+
+    response = client.put(
+        f"/api/investments/assets/{asset['id']}",
+        json={"current_price": None},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["current_price"] is None
+
+
 def test_portfolio_fully_sold_excluded(client, auth_headers):
     """Fully sold positions are excluded from portfolio."""
     asset = make_asset(client, auth_headers, ticker="SOLD").json()
@@ -363,6 +421,51 @@ def test_import_commit_csv(client, auth_headers):
     response = client.get("/api/investments/movements", headers=auth_headers)
     movements = response.json()
     assert len(movements) == 2
+
+
+def test_import_real_b3_format(client, auth_headers):
+    """Regression test against the actual B3 "Movimentação" export format
+    (columns/values confirmed against a real exported file): the "Produto"
+    column combines ticker and full company name ("BBAS3 - BANCO DO BRASIL
+    S/A"), and the dominant movement type is the generic "Transferência -
+    Liquidação", which only resolves to compra/venda via the separate
+    "Entrada/Saída" (Credito/Debito) column.
+    """
+    csv_content = (
+        "Entrada/Saída,Data,Movimentação,Produto,Instituição,Quantidade,Preço unitário,Valor da Operação\n"
+        "Credito,29/07/2026,Transferência - Liquidação,BBAS3 - BANCO DO BRASIL S/A,ITAU CV S/A,2,20.45,40.9\n"
+        "Credito,27/07/2026,Rendimento,KISU11 - KILIMA FDO INV IMOB,NOVA FUTURA CTVM LTDA,1,0.07,0.07\n"
+        "Credito,14/07/2026,Juros Sobre Capital Próprio,B3SA3 - B3 S.A.,ITAU CV S/A,10,1.1,11\n"
+    )
+
+    response = client.post(
+        "/api/investments/import",
+        files={"file": ("mov.csv", csv_content.encode(), "text/csv")},
+        headers=auth_headers,
+    )
+    preview = response.json()
+    assert preview["detected_mapping"]["direction"] == "Entrada/Saída"
+    assert preview["detected_mapping"]["ticker"] == "Produto"
+
+    response = client.post(
+        "/api/investments/import",
+        files={"file": ("mov.csv", csv_content.encode(), "text/csv")},
+        data={"column_mapping": json.dumps(preview["detected_mapping"])},
+        headers=auth_headers,
+    )
+    body = response.json()
+    assert body["committed"] is True
+    assert body["assets_created"] == 3
+    assert body["movements_created"] == 3
+
+    assets = {a["ticker"]: a for a in client.get("/api/investments/assets", headers=auth_headers).json()}
+    assert set(assets.keys()) == {"BBAS3", "KISU11", "B3SA3"}
+
+    movements = client.get("/api/investments/movements", headers=auth_headers).json()
+    by_asset = {m["asset_id"]: m["movement_type"] for m in movements}
+    assert by_asset[assets["BBAS3"]["id"]] == "compra"
+    assert by_asset[assets["KISU11"]["id"]] == "provento"
+    assert by_asset[assets["B3SA3"]["id"]] == "provento"
 
 
 def test_import_normalize_movement_types(client, auth_headers):

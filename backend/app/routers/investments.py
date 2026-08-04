@@ -37,7 +37,27 @@ COLUMN_SYNONYMS = {
     "quantity": ["quantidade", "qtde", "qtd", "quantidade_mov", "qtd_mov", "qty"],
     "unit_price": ["preço", "preço unitário", "valor unitário", "preço de tela", "preco", "unit_price", "price"],
     "total_value": ["valor", "valor total", "valor da operação", "valor operação", "valor_total", "total"],
+    # Optional: B3's real "Movimentação" export has a separate Credito/Debito column
+    # (confirmed against a real exported file) that's needed to disambiguate generic
+    # "Transferência - Liquidação" rows into compra vs venda -- see _normalize_movement_type.
+    "direction": ["entrada/saída", "entrada/saida", "e/s", "direção", "direcao", "tipo de lançamento"],
 }
+
+# Fields NOT required in a confirmed column_mapping -- "direction" is optional
+# (only used to disambiguate ambiguous movement types when present).
+OPTIONAL_MAPPING_FIELDS = {"unit_price", "total_value", "direction"}
+
+
+def _extract_ticker(raw_product: str) -> str:
+    """Extract a bare ticker from a B3 "Produto" cell.
+
+    Real B3 exports combine the ticker and the full company/fund name in one
+    cell, e.g. "BBAS3 - BANCO DO BRASIL S/A" or "HGLG11 - PÁTRIA LOG - FDO INV
+    IMOB - RESPONSABILIDADE LTDA." (confirmed against a real exported file --
+    the ticker is always the first " - "-separated segment, even when the
+    name itself contains more dashes).
+    """
+    return raw_product.split(" - ")[0].strip()
 
 
 def _detect_column(header: str, field: str) -> float:
@@ -128,24 +148,40 @@ def _parse_xlsx(file_bytes: bytes) -> tuple[list[str], list[dict[str, str]]]:
     return headers or [], rows
 
 
-def _normalize_movement_type(raw_type: str) -> str:
+def _normalize_movement_type(raw_type: str, direction: Optional[str] = None) -> str:
     """Normalize movement type strings from B3 files to internal enum values.
 
-    Handles common Portuguese variations case-insensitively.
+    Handles common Portuguese variations case-insensitively. `direction`, if
+    given, is the raw value of the "Entrada/Saída" (Credito/Debito) column --
+    confirmed against a real B3 export, the dominant movement type there is
+    "Transferência - Liquidação" (trade settlement), which by itself doesn't
+    say whether it was a buy or a sell; Credito (shares/money in) means
+    compra, Debito (shares/money out) means venda.
     """
     normalized = raw_type.strip().lower()
+    direction_normalized = direction.strip().lower() if direction else None
 
-    # Map common Portuguese variants
     if normalized in ("compra", "buy", "compras"):
         return "compra"
     elif normalized in ("venda", "sell", "vendas"):
         return "venda"
     elif normalized in ("bonificação", "bonificacao", "bonus"):
         return "bonificacao"
-    elif normalized in ("provento", "dividendo", "jcp", "rendimento", "dividend"):
+    elif normalized in (
+        "provento", "dividendo", "jcp", "rendimento", "dividend",
+        "juros sobre capital próprio", "juros sobre capital proprio",
+        "rendimento (juros)", "amortização", "amortizacao",
+    ):
         return "provento"
     elif normalized in ("desdobramento", "split", "splitting"):
         return "desdobramento"
+    elif "transferência" in normalized or "transferencia" in normalized or "liquidação" in normalized or "liquidacao" in normalized:
+        # Generic settlement row -- only resolvable with the direction column.
+        if direction_normalized in ("credito", "crédito"):
+            return "compra"
+        elif direction_normalized in ("debito", "débito"):
+            return "venda"
+        return "outro"
     else:
         return "outro"
 
@@ -357,14 +393,19 @@ def import_b3_file(
         # Extract mapped values
         try:
             raw_date = row.get(mapping["date"], "").strip()
-            raw_ticker = row.get(mapping["ticker"], "").strip()
+            raw_product = row.get(mapping["ticker"], "").strip()
             raw_movement_type = row.get(mapping["movement_type"], "").strip()
             raw_quantity = row.get(mapping.get("quantity"), "").strip()
             raw_unit_price = row.get(mapping.get("unit_price"), "").strip()
             raw_total_value = row.get(mapping.get("total_value"), "").strip()
+            raw_direction = row.get(mapping.get("direction"), "").strip()
 
             # Validate required values
-            if not raw_date or not raw_ticker or not raw_movement_type:
+            if not raw_date or not raw_product or not raw_movement_type:
+                continue
+
+            raw_ticker = _extract_ticker(raw_product)
+            if not raw_ticker:
                 continue
 
             # Parse date
@@ -382,7 +423,7 @@ def import_b3_file(
                     continue
 
             # Normalize movement type first (before validation)
-            normalized_type = _normalize_movement_type(raw_movement_type)
+            normalized_type = _normalize_movement_type(raw_movement_type, raw_direction or None)
 
             # Parse quantity and prices
             try:
