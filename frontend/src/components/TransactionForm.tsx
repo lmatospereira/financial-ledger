@@ -44,6 +44,7 @@ function buildEmptyForm(defaultAccountId?: number | null) {
     account_id: (defaultAccountId ?? '') as number | '',
     isInstallment: false,
     installments: '',
+    isPending: false,
   }
 }
 
@@ -77,6 +78,7 @@ export default function TransactionForm({
         account_id: initialValue.account_id,
         isInstallment: false,
         installments: '',
+        isPending: initialValue.status === 'pending',
       })
     } else {
       setForm(
@@ -155,6 +157,7 @@ export default function TransactionForm({
           date: form.date,
           category_id: form.category_id === '' ? null : Number(form.category_id),
           account_id: form.account_id,
+          status: form.isPending ? 'pending' : 'confirmed',
         })
       } catch (err) {
         setError(
@@ -338,6 +341,22 @@ export default function TransactionForm({
               )}
             </>
           )}
+
+          <FormControlLabel
+            control={
+              <input
+                type="checkbox"
+                checked={form.isPending}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    isPending: e.target.checked,
+                  }))
+                }
+              />
+            }
+            label="Marcar como pendente"
+          />
         </Stack>
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>

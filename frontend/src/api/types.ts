@@ -94,6 +94,8 @@ export interface Transaction {
   // Set when transaction is part of an installment purchase.
   installment_number?: number | null
   installment_total?: number | null
+  // Transaction status: 'confirmed' or 'pending' (omitted defaults to 'confirmed')
+  status?: 'confirmed' | 'pending'
 }
 
 export type TransactionInput = Omit<
@@ -102,6 +104,8 @@ export type TransactionInput = Omit<
 > & {
   // Transfers are never submitted through this shape — see POST /api/transfers.
   type: Exclude<TransactionType, 'transfer'>
+  // Optional status: omit to default to 'confirmed' server-side
+  status?: 'confirmed' | 'pending'
 }
 
 export interface TransferInput {

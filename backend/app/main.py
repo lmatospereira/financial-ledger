@@ -17,7 +17,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
 from app import auth, crud
-from app.database import Base, SessionLocal, engine
+from app.database import SessionLocal
+from app.db_migrations import run_migrations
 from app.limiter import limiter
 from app.routers import accounts as accounts_router
 from app.routers import alerts as alerts_router
@@ -35,7 +36,7 @@ from app.routers import users as users_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    run_migrations()
     _seed_admin_user()
     yield
 

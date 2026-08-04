@@ -146,6 +146,7 @@ class TransactionBase(BaseModel):
     type: CreateTransactionType
     category_id: Optional[int] = None
     account_id: int
+    status: Literal["confirmed", "pending"] = "confirmed"
 
     _validate_date = field_validator("date")(_validate_date_range)
 
@@ -172,6 +173,7 @@ class TransactionOut(BaseModel):
     recurring_transaction_id: Optional[int] = None
     installment_number: Optional[int] = None
     installment_total: Optional[int] = None
+    status: str
     created_at: datetime
     category: Optional[CategoryOut] = None
     account: Optional[AccountRef] = None

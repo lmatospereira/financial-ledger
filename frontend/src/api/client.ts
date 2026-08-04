@@ -185,6 +185,11 @@ export async function deleteTransaction(id: number): Promise<void> {
   await api.delete(`/transactions/${id}`)
 }
 
+export async function confirmTransaction(id: number): Promise<Transaction> {
+  const { data } = await api.post<Transaction>(`/transactions/${id}/confirm`)
+  return data
+}
+
 export async function getCategories(): Promise<Category[]> {
   const { data } = await api.get<Category[]>('/categories')
   return data

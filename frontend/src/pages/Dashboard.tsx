@@ -28,6 +28,7 @@ import TransactionForm from '../components/TransactionForm'
 import TransactionList from '../components/TransactionList'
 import TransferDialog from '../components/TransferDialog'
 import {
+  confirmTransaction,
   createTransaction,
   deleteTransaction,
   getAccounts,
@@ -88,6 +89,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null)
 
   const [activeCategoryId, setActiveCategoryId] = useState<number | null>(null)
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all')
   const [formOpen, setFormOpen] = useState(false)
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(
     null,
@@ -152,10 +154,26 @@ export default function Dashboard() {
     await loadData()
   }
 
+  const handleConfirm = async (transaction: Transaction) => {
+    await confirmTransaction(transaction.id)
+    await loadData()
+  }
+
   const filteredTransactions = useMemo(() => {
-    if (activeCategoryId === null) return transactions
-    return transactions.filter((t) => t.category_id === activeCategoryId)
-  }, [transactions, activeCategoryId])
+    let result = transactions
+
+    // Filter by category
+    if (activeCategoryId !== null) {
+      result = result.filter((t) => t.category_id === activeCategoryId)
+    }
+
+    // Filter by status
+    if (statusFilter !== 'all') {
+      result = result.filter((t) => t.status === statusFilter)
+    }
+
+    return result
+  }, [transactions, activeCategoryId, statusFilter])
 
   return (
     <Layout>
@@ -285,27 +303,49 @@ export default function Dashboard() {
         </Stack>
 
         {categories.length > 0 && (
-          <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-            <Chip
-              label="Todas"
-              color={activeCategoryId === null ? 'primary' : 'default'}
-              onClick={() => setActiveCategoryId(null)}
-            />
-            {categories.map((category) => (
+          <Stack spacing={2}>
+            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
               <Chip
-                key={category.id}
-                label={category.name}
-                onClick={() => setActiveCategoryId(category.id)}
-                sx={{
-                  bgcolor: activeCategoryId === category.id ? category.color : undefined,
-                  color: activeCategoryId === category.id ? 'white' : undefined,
-                  borderColor: category.color,
-                }}
-                variant={activeCategoryId === category.id ? 'filled' : 'outlined'}
+                label="Todas"
+                color={activeCategoryId === null ? 'primary' : 'default'}
+                onClick={() => setActiveCategoryId(null)}
               />
-            ))}
+              {categories.map((category) => (
+                <Chip
+                  key={category.id}
+                  label={category.name}
+                  onClick={() => setActiveCategoryId(category.id)}
+                  sx={{
+                    bgcolor: activeCategoryId === category.id ? category.color : undefined,
+                    color: activeCategoryId === category.id ? 'white' : undefined,
+                    borderColor: category.color,
+                  }}
+                  variant={activeCategoryId === category.id ? 'filled' : 'outlined'}
+                />
+              ))}
+            </Stack>
           </Stack>
         )}
+
+        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+          <Chip
+            label="Todas"
+            color={statusFilter === 'all' ? 'primary' : 'default'}
+            onClick={() => setStatusFilter('all')}
+          />
+          <Chip
+            label="Pendentes"
+            color={statusFilter === 'pending' ? 'warning' : 'default'}
+            onClick={() => setStatusFilter('pending')}
+            variant={statusFilter === 'pending' ? 'filled' : 'outlined'}
+          />
+          <Chip
+            label="Confirmadas"
+            color={statusFilter === 'confirmed' ? 'success' : 'default'}
+            onClick={() => setStatusFilter('confirmed')}
+            variant={statusFilter === 'confirmed' ? 'filled' : 'outlined'}
+          />
+        </Stack>
 
         <Card>
           <Box sx={{ px: 2, pt: 2 }}>
@@ -322,6 +362,7 @@ export default function Dashboard() {
               transactions={filteredTransactions}
               onEdit={openEditForm}
               onDelete={handleDelete}
+              onConfirm={handleConfirm}
             />
           )}
         </Card>

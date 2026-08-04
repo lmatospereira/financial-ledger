@@ -133,9 +133,16 @@ def account_has_transactions(db: Session, account_id: int) -> bool:
 def get_account_balance(db: Session, account_id: int, before: date | None = None) -> float:
     """All-time (or, if `before` is given, as-of) balance of an account:
     +income, -expense, -transfers out, +transfers in.
+    Only counts confirmed transactions.
     """
-    out_filters = [models.Transaction.account_id == account_id]
-    in_filters = [models.Transaction.to_account_id == account_id]
+    out_filters = [
+        models.Transaction.account_id == account_id,
+        models.Transaction.status == "confirmed",
+    ]
+    in_filters = [
+        models.Transaction.to_account_id == account_id,
+        models.Transaction.status == "confirmed",
+    ]
     if before is not None:
         out_filters.append(models.Transaction.date < before)
         in_filters.append(models.Transaction.date < before)
@@ -190,7 +197,12 @@ def delete_category(db: Session, db_category: models.Category) -> None:
 
 # ---------- Transaction ----------
 def get_transactions(
-    db: Session, user_id: int, month: int, year: int, account_id: int | None = None
+    db: Session,
+    user_id: int,
+    month: int,
+    year: int,
+    account_id: int | None = None,
+    status: str | None = None,
 ) -> list[models.Transaction]:
     start = date(year, month, 1)
     end = date(year, month, monthrange(year, month)[1])
@@ -209,6 +221,8 @@ def get_transactions(
                 models.Transaction.to_account_id == account_id,
             )
         )
+    if status is not None:
+        query = query.filter(models.Transaction.status == status)
     return query.order_by(models.Transaction.date).all()
 
 
@@ -243,6 +257,30 @@ def update_transaction(
 def delete_transaction(db: Session, db_transaction: models.Transaction) -> None:
     db.delete(db_transaction)
     db.commit()
+
+
+def confirm_transaction(db: Session, transaction_id: int, user_id: int) -> models.Transaction:
+    """Confirm a pending transaction, making it count toward balance/summary.
+
+    Returns the updated transaction.
+    Raises KeyError if not found or not owned by user.
+    Raises ValueError if already confirmed.
+    """
+    db_transaction = (
+        db.query(models.Transaction)
+        .filter(models.Transaction.id == transaction_id, models.Transaction.user_id == user_id)
+        .first()
+    )
+    if db_transaction is None:
+        raise KeyError("transaction not found")
+
+    if db_transaction.status == "confirmed":
+        raise ValueError("Transaction already confirmed")
+
+    db_transaction.status = "confirmed"
+    db.commit()
+    db.refresh(db_transaction)
+    return db_transaction
 
 
 def create_installments(
@@ -324,6 +362,7 @@ def _totals_for_range(
         models.Transaction.user_id == user_id,
         models.Transaction.date >= start,
         models.Transaction.date <= end,
+        models.Transaction.status == "confirmed",
     ]
     if account_id is not None:
         filters.append(models.Transaction.account_id == account_id)
@@ -335,7 +374,11 @@ def _totals_for_range(
 def _totals_before(
     db: Session, user_id: int, start: date, account_id: int | None = None
 ) -> tuple[float, float]:
-    filters = [models.Transaction.user_id == user_id, models.Transaction.date < start]
+    filters = [
+        models.Transaction.user_id == user_id,
+        models.Transaction.date < start,
+        models.Transaction.status == "confirmed",
+    ]
     if account_id is not None:
         filters.append(models.Transaction.account_id == account_id)
     income_total = _sum_where(db, models.Transaction.type == "income", *filters)
@@ -403,6 +446,7 @@ def get_category_totals(db: Session, user_id: int, month: int, year: int) -> lis
             models.Transaction.type == "expense",
             models.Transaction.date >= start,
             models.Transaction.date <= end,
+            models.Transaction.status == "confirmed",
         )
         .group_by(models.Category.id)
         .all()
@@ -419,6 +463,7 @@ def get_category_totals(db: Session, user_id: int, month: int, year: int) -> lis
         models.Transaction.category_id.is_(None),
         models.Transaction.date >= start,
         models.Transaction.date <= end,
+        models.Transaction.status == "confirmed",
     )
     if uncategorized_total > 0:
         results.append(
@@ -499,6 +544,7 @@ def get_budget_status(
             models.Transaction.category_id == budget.category_id,
             models.Transaction.date >= start,
             models.Transaction.date <= end,
+            models.Transaction.status == "confirmed",
         )
 
         percentage = (spent / budget.amount * 100) if budget.amount > 0 else 0.0
@@ -816,6 +862,7 @@ def get_credit_card_invoice(
         models.Transaction.type == "expense",
         models.Transaction.date >= period_start,
         models.Transaction.date <= period_end,
+        models.Transaction.status == "confirmed",
     ) - _sum_where(
         db,
         models.Transaction.account_id == account_id,
@@ -823,6 +870,7 @@ def get_credit_card_invoice(
         models.Transaction.type == "income",
         models.Transaction.date >= period_start,
         models.Transaction.date <= period_end,
+        models.Transaction.status == "confirmed",
     )
 
     # Convert transactions to TransactionOut
