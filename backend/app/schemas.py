@@ -416,3 +416,90 @@ class CreditCardInvoiceOut(BaseModel):
 # ---------- Dashboard Preferences ----------
 class DashboardPreferencesUpdate(BaseModel):
     hidden_widgets: list[str]
+
+
+# ---------- Asset ----------
+class AssetBase(BaseModel):
+    ticker: str
+    name: Optional[str] = None
+    asset_type: Literal["acao", "fii", "etf", "bdr", "outro"]
+
+
+class AssetCreate(AssetBase):
+    pass
+
+
+class AssetUpdate(BaseModel):
+    name: Optional[str] = None
+    asset_type: Optional[Literal["acao", "fii", "etf", "bdr", "outro"]] = None
+
+
+class AssetOut(AssetBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+
+
+# ---------- Investment Movement ----------
+class InvestmentMovementBase(BaseModel):
+    asset_id: int
+    date: date
+    movement_type: Literal["compra", "venda", "bonificacao", "provento", "desdobramento", "outro"]
+    quantity: float = Field(gt=0, le=MAX_AMOUNT)
+    # unit_price can be None or 0 for non-purchase movements (bonuses, splits, dividends)
+    unit_price: Optional[float] = Field(default=None, ge=0, le=MAX_AMOUNT)
+    # total_value can be 0 for non-purchase movements (bonuses, splits, dividends)
+    total_value: float = Field(ge=0, le=MAX_AMOUNT)
+
+    _validate_date = field_validator("date")(_validate_date_range)
+
+
+class InvestmentMovementCreate(InvestmentMovementBase):
+    pass
+
+
+class InvestmentMovementUpdate(BaseModel):
+    asset_id: Optional[int] = None
+    date: Optional[date] = None
+    movement_type: Optional[Literal["compra", "venda", "bonificacao", "provento", "desdobramento", "outro"]] = None
+    quantity: Optional[float] = Field(default=None, gt=0, le=MAX_AMOUNT)
+    unit_price: Optional[float] = Field(default=None, gt=0, le=MAX_AMOUNT)
+    total_value: Optional[float] = Field(default=None, gt=0, le=MAX_AMOUNT)
+
+    _validate_date = field_validator("date")(
+        lambda cls, v: _validate_date_range(v) if v is not None else v
+    )
+
+
+class InvestmentMovementOut(InvestmentMovementBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: datetime
+
+
+# ---------- Portfolio ----------
+class PortfolioPositionOut(BaseModel):
+    ticker: str
+    name: Optional[str] = None
+    asset_type: str
+    quantity_held: float
+    avg_price: float
+    total_invested: float
+
+
+# ---------- Import Preview Response ----------
+class ImportPreviewResponse(BaseModel):
+    committed: bool = False
+    raw_columns: list[str]
+    detected_mapping: dict[str, Optional[str]]
+    sample_rows: list[dict[str, Optional[str]]]
+    row_count: int
+
+
+# ---------- Import Commit Response ----------
+class ImportCommitResponse(BaseModel):
+    committed: bool = True
+    assets_created: int
+    movements_created: int

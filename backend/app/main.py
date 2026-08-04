@@ -27,6 +27,7 @@ from app.routers import bills as bills_router
 from app.routers import budgets as budgets_router
 from app.routers import categories as categories_router
 from app.routers import goals as goals_router
+from app.routers import investments as investments_router
 from app.routers import recurring_transactions as recurring_transactions_router
 from app.routers import reports as reports_router
 from app.routers import transactions as transactions_router
@@ -68,6 +69,7 @@ app.include_router(bills_router.router)
 app.include_router(goals_router.router)
 app.include_router(alerts_router.router)
 app.include_router(reports_router.router)
+app.include_router(investments_router.router)
 
 
 @app.exception_handler(RequestValidationError)
