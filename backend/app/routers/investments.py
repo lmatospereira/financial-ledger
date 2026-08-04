@@ -60,6 +60,37 @@ def _extract_ticker(raw_product: str) -> str:
     return raw_product.split(" - ")[0].strip()
 
 
+def _guess_asset_type(ticker: str) -> str:
+    """Best-effort asset type from a B3 ticker's suffix.
+
+    B3 ticker codes are (mostly) a short base code plus a trailing number --
+    but the base code itself can contain digits too (e.g. "B3SA3", B3's own
+    ticker), so this only constrains overall shape/length, not "letters
+    only before the last digit". This is a heuristic, not authoritative --
+    "outro" is the honest fallback whenever the ticker doesn't look like a
+    standard B3 exchange code at all (e.g. "CDB" from "CDB - CDB3266WRKT -
+    ITAU...", a fixed income product, not a ticker in this sense). The user
+    can always correct the type manually afterward; this just saves them
+    from having to do it for every single row when the guess is obvious.
+    """
+    t = ticker.strip().upper()
+    if len(t) not in (5, 6) or not t[0].isalpha():
+        return "outro"
+    # BDRs: ends in "34" (e.g. AAPL34, GOGL34) -- check before the generic
+    # single-trailing-digit rule below, since that would also match "...4".
+    if t.endswith("34"):
+        return "bdr"
+    # FIIs/ETFs: ends in "11" (e.g. HGLG11, BOVA11). Can't reliably tell FII
+    # from ETF by suffix alone -- FII is the far more common case in
+    # practice, so that's the default guess.
+    if t.endswith("11"):
+        return "fii"
+    # Ordinary/preferred shares: ends in a single digit 1-8.
+    if t[-1].isdigit() and t[-1] in "12345678":
+        return "acao"
+    return "outro"
+
+
 def _detect_column(header: str, field: str) -> float:
     """Attempt fuzzy matching between a header string and synonyms for a field.
 
@@ -446,13 +477,16 @@ def import_b3_file(
             if total_value < 0:
                 continue
 
-            # Get or create asset (always with asset_type="outro" as placeholder)
+            # Get or create asset, guessing asset_type from the ticker suffix
+            # (see _guess_asset_type) -- best-effort, user-correctable.
             asset = crud.get_asset_by_ticker(db, current_user.id, raw_ticker)
             if asset is None:
                 asset = crud.create_asset(
                     db,
                     current_user.id,
-                    schemas.AssetCreate(ticker=raw_ticker, name=None, asset_type="outro"),
+                    schemas.AssetCreate(
+                        ticker=raw_ticker, name=None, asset_type=_guess_asset_type(raw_ticker)
+                    ),
                 )
                 assets_created += 1
 
