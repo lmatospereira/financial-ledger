@@ -897,3 +897,169 @@ def get_credit_card_invoice(
         total=total,
         transactions=transaction_outs,
     )
+
+
+# ---------- Asset ----------
+def get_assets(db: Session, user_id: int) -> list[models.Asset]:
+    return (
+        db.query(models.Asset)
+        .filter(models.Asset.user_id == user_id)
+        .order_by(models.Asset.ticker)
+        .all()
+    )
+
+
+def get_asset(db: Session, asset_id: int, user_id: int) -> models.Asset | None:
+    return (
+        db.query(models.Asset)
+        .filter(models.Asset.id == asset_id, models.Asset.user_id == user_id)
+        .first()
+    )
+
+
+def get_asset_by_ticker(db: Session, user_id: int, ticker: str) -> models.Asset | None:
+    return (
+        db.query(models.Asset)
+        .filter(models.Asset.user_id == user_id, models.Asset.ticker == ticker)
+        .first()
+    )
+
+
+def create_asset(db: Session, user_id: int, asset: schemas.AssetCreate) -> models.Asset:
+    db_asset = models.Asset(**asset.model_dump(), user_id=user_id)
+    db.add(db_asset)
+    db.commit()
+    db.refresh(db_asset)
+    return db_asset
+
+
+def update_asset(
+    db: Session, db_asset: models.Asset, asset: schemas.AssetUpdate
+) -> models.Asset:
+    for field, value in asset.model_dump(exclude_none=True).items():
+        setattr(db_asset, field, value)
+    db.commit()
+    db.refresh(db_asset)
+    return db_asset
+
+
+def delete_asset(db: Session, db_asset: models.Asset) -> None:
+    db.delete(db_asset)
+    db.commit()
+
+
+# ---------- Investment Movement ----------
+def get_investment_movements(db: Session, user_id: int) -> list[models.InvestmentMovement]:
+    return (
+        db.query(models.InvestmentMovement)
+        .filter(models.InvestmentMovement.user_id == user_id)
+        .order_by(models.InvestmentMovement.date)
+        .all()
+    )
+
+
+def get_investment_movements_by_asset(
+    db: Session, asset_id: int, user_id: int
+) -> list[models.InvestmentMovement]:
+    return (
+        db.query(models.InvestmentMovement)
+        .filter(
+            models.InvestmentMovement.asset_id == asset_id,
+            models.InvestmentMovement.user_id == user_id,
+        )
+        .order_by(models.InvestmentMovement.date)
+        .all()
+    )
+
+
+def get_investment_movement(
+    db: Session, movement_id: int, user_id: int
+) -> models.InvestmentMovement | None:
+    return (
+        db.query(models.InvestmentMovement)
+        .filter(
+            models.InvestmentMovement.id == movement_id,
+            models.InvestmentMovement.user_id == user_id,
+        )
+        .first()
+    )
+
+
+def create_investment_movement(
+    db: Session, user_id: int, movement: schemas.InvestmentMovementCreate
+) -> models.InvestmentMovement:
+    db_movement = models.InvestmentMovement(**movement.model_dump(), user_id=user_id)
+    db.add(db_movement)
+    db.commit()
+    db.refresh(db_movement)
+    return db_movement
+
+
+def update_investment_movement(
+    db: Session,
+    db_movement: models.InvestmentMovement,
+    movement: schemas.InvestmentMovementUpdate,
+) -> models.InvestmentMovement:
+    for field, value in movement.model_dump(exclude_none=True).items():
+        setattr(db_movement, field, value)
+    db.commit()
+    db.refresh(db_movement)
+    return db_movement
+
+
+def delete_investment_movement(db: Session, db_movement: models.InvestmentMovement) -> None:
+    db.delete(db_movement)
+    db.commit()
+
+
+def get_portfolio(db: Session, user_id: int) -> list[schemas.PortfolioPositionOut]:
+    """Aggregate all movements per asset into a position view.
+
+    Skips fully sold positions (quantity_held <= 0). The avg_price is calculated
+    as a simple weighted average of purchase prices only (sum of "compra" total_value
+    divided by sum of "compra" quantities), which is an MVP simplification that
+    deliberately avoids full FIFO/cost-basis accounting. This makes the calculation
+    fast and UI-friendly at the cost of not reflecting actual tax-lot disposal
+    mechanics; it's suitable for a quick portfolio snapshot.
+    """
+    assets = get_assets(db, user_id)
+    results = []
+
+    for asset in assets:
+        movements = get_investment_movements_by_asset(db, asset.id, user_id)
+
+        # Aggregate movements
+        quantity_held = 0.0
+        total_cost = 0.0
+        total_bought = 0.0
+
+        for movement in movements:
+            if movement.movement_type == "compra":
+                quantity_held += movement.quantity
+                total_cost += movement.total_value
+                total_bought += movement.quantity
+            elif movement.movement_type == "venda":
+                quantity_held -= movement.quantity
+            elif movement.movement_type in ("bonificacao", "desdobramento"):
+                quantity_held += movement.quantity
+
+        # Skip positions fully sold
+        if quantity_held <= 0:
+            continue
+
+        # Calculate weighted average price of purchases only
+        avg_price = total_cost / total_bought if total_bought > 0 else 0.0
+        total_invested = quantity_held * avg_price
+
+        results.append(
+            schemas.PortfolioPositionOut(
+                ticker=asset.ticker,
+                name=asset.name,
+                asset_type=asset.asset_type,
+                quantity_held=quantity_held,
+                avg_price=avg_price,
+                total_invested=total_invested,
+            )
+        )
+
+    return results

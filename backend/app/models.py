@@ -160,3 +160,37 @@ class Goal(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
+
+
+class Asset(Base):
+    __tablename__ = "assets"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    ticker: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # "acao" | "fii" | "etf" | "bdr" | "outro"
+    asset_type: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    # Unique constraint on (user_id, ticker): only one ticker per user
+    __table_args__ = (UniqueConstraint("user_id", "ticker", name="uq_assets_user_ticker"),)
+
+
+class InvestmentMovement(Base):
+    __tablename__ = "investment_movements"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), nullable=False, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    # "compra" | "venda" | "bonificacao" | "provento" | "desdobramento" | "outro"
+    movement_type: Mapped[str] = mapped_column(String, nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    unit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    total_value: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
