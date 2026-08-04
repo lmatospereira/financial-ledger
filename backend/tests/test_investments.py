@@ -258,6 +258,30 @@ def test_portfolio_profitability_with_current_price(client, auth_headers):
     assert position["profit_loss_pct"] == 50.0  # 50/100 * 100
 
 
+def test_asset_current_price_can_be_cleared(client, auth_headers):
+    """Setting current_price to null via update actually clears it.
+
+    Regression test: crud.update_asset used to build the update dict with
+    exclude_none=True, which silently dropped an explicit `current_price:
+    null` instead of applying it, so "clearing" a price in the UI was a
+    no-op.
+    """
+    asset = make_asset(client, auth_headers, ticker="CLR1").json()
+    client.put(
+        f"/api/investments/assets/{asset['id']}",
+        json={"current_price": 42.0},
+        headers=auth_headers,
+    )
+
+    response = client.put(
+        f"/api/investments/assets/{asset['id']}",
+        json={"current_price": None},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["current_price"] is None
+
+
 def test_portfolio_fully_sold_excluded(client, auth_headers):
     """Fully sold positions are excluded from portfolio."""
     asset = make_asset(client, auth_headers, ticker="SOLD").json()

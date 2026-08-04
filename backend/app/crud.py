@@ -936,7 +936,11 @@ def create_asset(db: Session, user_id: int, asset: schemas.AssetCreate) -> model
 def update_asset(
     db: Session, db_asset: models.Asset, asset: schemas.AssetUpdate
 ) -> models.Asset:
-    for field, value in asset.model_dump(exclude_none=True).items():
+    # exclude_unset (not exclude_none): current_price is the one field here
+    # that legitimately needs to be clearable back to null (e.g. the user
+    # made a typo and wants to remove a manually-entered price) -- excluding
+    # None values would silently ignore that request instead of applying it.
+    for field, value in asset.model_dump(exclude_unset=True).items():
         setattr(db_asset, field, value)
     db.commit()
     db.refresh(db_asset)
