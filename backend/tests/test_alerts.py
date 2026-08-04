@@ -1,5 +1,5 @@
 """Tests for alerts: upcoming bills, recurring transactions, and installments."""
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -16,7 +16,8 @@ def expense_category(client, auth_headers):
 
 def test_alerts_upcoming_bills(client, auth_headers, default_account, expense_category):
     """Test that upcoming unpaid bills are returned."""
-    # Create a bill due in 5 days (today is 2026-07-29, so due on 2026-08-03)
+    # Create a bill due in 5 days
+    due_date = date.today() + timedelta(days=5)
     bill_response = client.post(
         "/api/bills",
         json={
@@ -24,7 +25,7 @@ def test_alerts_upcoming_bills(client, auth_headers, default_account, expense_ca
             "category_id": expense_category["id"],
             "description": "Phone Bill",
             "amount": 50.0,
-            "due_date": "2026-08-03",
+            "due_date": due_date.isoformat(),
         },
         headers=auth_headers,
     )
@@ -43,7 +44,8 @@ def test_alerts_upcoming_bills(client, auth_headers, default_account, expense_ca
 
 def test_alerts_overdue_bills(client, auth_headers, default_account, expense_category):
     """Test that overdue bills are flagged with is_overdue=True."""
-    # Create an overdue bill (due in the past: 2026-07-28 when today is 2026-07-29)
+    # Create an overdue bill (due yesterday)
+    due_date = date.today() - timedelta(days=1)
     bill_response = client.post(
         "/api/bills",
         json={
@@ -51,7 +53,7 @@ def test_alerts_overdue_bills(client, auth_headers, default_account, expense_cat
             "category_id": expense_category["id"],
             "description": "Overdue Bill",
             "amount": 75.0,
-            "due_date": "2026-07-28",
+            "due_date": due_date.isoformat(),
         },
         headers=auth_headers,
     )
@@ -67,6 +69,7 @@ def test_alerts_overdue_bills(client, auth_headers, default_account, expense_cat
 
 def test_alerts_paid_bills_excluded(client, auth_headers, default_account, expense_category):
     """Test that paid bills are excluded from alerts."""
+    due_date = date.today() - timedelta(days=1)
     bill_response = client.post(
         "/api/bills",
         json={
@@ -74,7 +77,7 @@ def test_alerts_paid_bills_excluded(client, auth_headers, default_account, expen
             "category_id": expense_category["id"],
             "description": "Phone Bill",
             "amount": 50.0,
-            "due_date": "2026-07-28",
+            "due_date": due_date.isoformat(),
         },
         headers=auth_headers,
     )
@@ -95,6 +98,7 @@ def test_alerts_paid_bills_excluded(client, auth_headers, default_account, expen
 def test_alerts_bills_outside_window(client, auth_headers, default_account, expense_category):
     """Test that bills beyond the days window are excluded."""
     # Create a bill due 15 days from now
+    due_date = date.today() + timedelta(days=15)
     client.post(
         "/api/bills",
         json={
@@ -102,7 +106,7 @@ def test_alerts_bills_outside_window(client, auth_headers, default_account, expe
             "category_id": expense_category["id"],
             "description": "Future Bill",
             "amount": 100.0,
-            "due_date": "2026-08-10",
+            "due_date": due_date.isoformat(),
         },
         headers=auth_headers,
     )
@@ -114,7 +118,8 @@ def test_alerts_bills_outside_window(client, auth_headers, default_account, expe
 
 def test_alerts_recurring_transactions(client, auth_headers, default_account):
     """Test that next recurring transaction occurrences are included."""
-    # Create a recurring transaction on the 15th of each month
+    # Create a recurring transaction on the 15th of each month, started a year ago
+    start_date = date.today().replace(year=date.today().year - 1)
     response = client.post(
         "/api/recurring-transactions",
         json={
@@ -124,15 +129,14 @@ def test_alerts_recurring_transactions(client, auth_headers, default_account):
             "amount": 1000.0,
             "type": "expense",
             "day_of_month": 15,
-            "start_date": "2026-01-01",
+            "start_date": start_date.isoformat(),
             "end_date": None,
         },
         headers=auth_headers,
     )
     recurring = response.json()
 
-    # Today is 2026-07-23, so next 15th is 2026-07-15 (already passed)
-    # Next occurrence should be 2026-08-15
+    # Next occurrence (this month's 15th, or next month's if already passed)
     response = client.get("/api/alerts/upcoming?days=30", headers=auth_headers)
     alerts = response.json()
     recurring_alerts = [a for a in alerts if a["kind"] == "recurring"]
@@ -177,7 +181,8 @@ def test_alerts_recurring_due_today_not_skipped(client, auth_headers, default_ac
 
 def test_alerts_recurring_month_end_clamping(client, auth_headers, default_account):
     """Test that day_of_month=31 is clamped to the last day of Feb (28/29)."""
-    # Create recurring on 31st starting from current month, which should clamp to last day in short months
+    # Create recurring on 31st starting a year ago, which should clamp to last day in short months
+    start_date = date.today().replace(year=date.today().year - 1)
     response = client.post(
         "/api/recurring-transactions",
         json={
@@ -187,7 +192,7 @@ def test_alerts_recurring_month_end_clamping(client, auth_headers, default_accou
             "amount": 500.0,
             "type": "expense",
             "day_of_month": 31,
-            "start_date": "2026-01-01",
+            "start_date": start_date.isoformat(),
             "end_date": None,
         },
         headers=auth_headers,
@@ -206,7 +211,9 @@ def test_alerts_recurring_month_end_clamping(client, auth_headers, default_accou
 
 def test_alerts_recurring_respects_end_date(client, auth_headers, default_account):
     """Test that recurring transactions are excluded after their end_date."""
-    # Create recurring that ends in June (before current date of 2026-07-29)
+    # Create recurring that started two years ago and ended a year ago (both in the past)
+    start_date = date.today().replace(year=date.today().year - 2)
+    end_date = date.today().replace(year=date.today().year - 1)
     response = client.post(
         "/api/recurring-transactions",
         json={
@@ -216,15 +223,15 @@ def test_alerts_recurring_respects_end_date(client, auth_headers, default_accoun
             "amount": 100.0,
             "type": "expense",
             "day_of_month": 15,
-            "start_date": "2026-01-01",
-            "end_date": "2026-06-15",
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         },
         headers=auth_headers,
     )
     assert response.status_code == 201, f"Failed to create recurring: {response.text}"
     recurring = response.json()
 
-    # Request alerts for August (after end_date)
+    # Request alerts for the next 90 days (all after end_date)
     response = client.get("/api/alerts/upcoming?days=90", headers=auth_headers)
     assert response.status_code == 200
     alerts = response.json()
@@ -235,6 +242,8 @@ def test_alerts_recurring_respects_end_date(client, auth_headers, default_accoun
 def test_alerts_recurring_inactive_excluded(client, auth_headers, default_account):
     """Test that inactive recurring transactions are excluded."""
     # Create recurring with end_date in the past (making it inactive effectively)
+    start_date = date.today().replace(year=date.today().year - 2)
+    end_date = date.today() - timedelta(days=30)
     response = client.post(
         "/api/recurring-transactions",
         json={
@@ -244,8 +253,8 @@ def test_alerts_recurring_inactive_excluded(client, auth_headers, default_accoun
             "amount": 100.0,
             "type": "expense",
             "day_of_month": 15,
-            "start_date": "2026-01-01",
-            "end_date": "2026-07-01",  # Ended before today (2026-07-29)
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
         },
         headers=auth_headers,
     )
@@ -260,7 +269,8 @@ def test_alerts_recurring_inactive_excluded(client, auth_headers, default_accoun
 
 def test_alerts_installment_transactions(client, auth_headers, default_account):
     """Test that upcoming installment transactions are included."""
-    # Create an installment
+    # Create an installment starting tomorrow
+    first_date = date.today() + timedelta(days=1)
     response = client.post(
         "/api/transactions/installments",
         json={
@@ -270,7 +280,7 @@ def test_alerts_installment_transactions(client, auth_headers, default_account):
             "total_amount": 300.0,
             "installments": 3,
             "type": "expense",
-            "first_date": "2026-08-01",
+            "first_date": first_date.isoformat(),
         },
         headers=auth_headers,
     )
@@ -284,6 +294,8 @@ def test_alerts_installment_transactions(client, auth_headers, default_account):
 
 def test_alerts_sorted_by_due_date(client, auth_headers, default_account, expense_category):
     """Test that alerts are sorted by due_date ascending."""
+    today = date.today()
+
     # Create bills with different due dates
     client.post(
         "/api/bills",
@@ -292,7 +304,7 @@ def test_alerts_sorted_by_due_date(client, auth_headers, default_account, expens
             "category_id": expense_category["id"],
             "description": "Bill 3",
             "amount": 100.0,
-            "due_date": "2026-08-01",
+            "due_date": (today + timedelta(days=5)).isoformat(),
         },
         headers=auth_headers,
     )
@@ -304,7 +316,7 @@ def test_alerts_sorted_by_due_date(client, auth_headers, default_account, expens
             "category_id": expense_category["id"],
             "description": "Bill 1",
             "amount": 50.0,
-            "due_date": "2026-07-25",
+            "due_date": (today + timedelta(days=1)).isoformat(),
         },
         headers=auth_headers,
     )
@@ -316,7 +328,7 @@ def test_alerts_sorted_by_due_date(client, auth_headers, default_account, expens
             "category_id": expense_category["id"],
             "description": "Bill 2",
             "amount": 75.0,
-            "due_date": "2026-07-30",
+            "due_date": (today + timedelta(days=3)).isoformat(),
         },
         headers=auth_headers,
     )
@@ -349,6 +361,8 @@ def test_alerts_days_parameter_bounds(client, auth_headers):
 
 def test_alerts_default_days_is_7(client, auth_headers, default_account, expense_category):
     """Test that default days parameter is 7."""
+    today = date.today()
+
     # Create a bill due in 6 days (included)
     client.post(
         "/api/bills",
@@ -357,12 +371,12 @@ def test_alerts_default_days_is_7(client, auth_headers, default_account, expense
             "category_id": expense_category["id"],
             "description": "Within 7 days",
             "amount": 50.0,
-            "due_date": "2026-07-29",
+            "due_date": (today + timedelta(days=6)).isoformat(),
         },
         headers=auth_headers,
     )
 
-    # Create a bill due in 8 days (excluded)
+    # Create a bill due in 10 days (excluded)
     client.post(
         "/api/bills",
         json={
@@ -370,7 +384,7 @@ def test_alerts_default_days_is_7(client, auth_headers, default_account, expense
             "category_id": expense_category["id"],
             "description": "Beyond 7 days",
             "amount": 50.0,
-            "due_date": "2026-07-31",
+            "due_date": (today + timedelta(days=10)).isoformat(),
         },
         headers=auth_headers,
     )
@@ -378,10 +392,9 @@ def test_alerts_default_days_is_7(client, auth_headers, default_account, expense
     response = client.get("/api/alerts/upcoming", headers=auth_headers)
     alerts = response.json()
     # Default should be 7 days
-    assert len(alerts) >= 1
     descriptions = [a["description"] for a in alerts]
     assert "Within 7 days" in descriptions
-    # The "Beyond 7 days" bill should be outside the 7-day window
+    assert "Beyond 7 days" not in descriptions
 
 
 def test_alerts_require_auth(client):
@@ -391,6 +404,10 @@ def test_alerts_require_auth(client):
 
 def test_alerts_aggregation(client, auth_headers, default_account, expense_category):
     """Test that alerts correctly aggregate bills, recurring, and installments."""
+    today = date.today()
+    due_date = today + timedelta(days=3)
+    start_date = today.replace(year=today.year - 1)
+
     # Create a bill
     client.post(
         "/api/bills",
@@ -399,7 +416,7 @@ def test_alerts_aggregation(client, auth_headers, default_account, expense_categ
             "category_id": expense_category["id"],
             "description": "Bill",
             "amount": 50.0,
-            "due_date": "2026-07-25",
+            "due_date": due_date.isoformat(),
         },
         headers=auth_headers,
     )
@@ -413,8 +430,8 @@ def test_alerts_aggregation(client, auth_headers, default_account, expense_categ
             "description": "Recurring",
             "amount": 100.0,
             "type": "expense",
-            "day_of_month": 25,
-            "start_date": "2026-01-01",
+            "day_of_month": due_date.day,
+            "start_date": start_date.isoformat(),
             "end_date": None,
         },
         headers=auth_headers,
@@ -430,7 +447,7 @@ def test_alerts_aggregation(client, auth_headers, default_account, expense_categ
             "total_amount": 300.0,
             "installments": 3,
             "type": "expense",
-            "first_date": "2026-07-25",
+            "first_date": due_date.isoformat(),
         },
         headers=auth_headers,
     )
