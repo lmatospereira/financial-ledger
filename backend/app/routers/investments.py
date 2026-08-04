@@ -47,6 +47,22 @@ COLUMN_SYNONYMS = {
 # (only used to disambiguate ambiguous movement types when present).
 OPTIONAL_MAPPING_FIELDS = {"unit_price", "total_value", "direction"}
 
+# The exact header row of B3's own "Movimentação" export from the investor
+# portal (investidor.b3.com.br -> Extratos e Informativos), confirmed against
+# a real file the user provided. When a file's headers match this exactly
+# (order-independent), we know the mapping with certainty and can skip
+# asking the user to manually review/correct each column -- the synonym
+# matching above still exists as the fallback for anything that doesn't
+# match this precisely (other brokers, older exports, hand-edited files).
+KNOWN_B3_MOVIMENTACAO_HEADERS = {
+    "Entrada/Saída", "Data", "Movimentação", "Produto",
+    "Instituição", "Quantidade", "Preço unitário", "Valor da Operação",
+}
+
+
+def _is_known_b3_format(headers: list[str]) -> bool:
+    return {h.strip() for h in headers} == KNOWN_B3_MOVIMENTACAO_HEADERS
+
 
 def _extract_ticker(raw_product: str) -> str:
     """Extract a bare ticker from a B3 "Produto" cell.
@@ -396,6 +412,7 @@ def import_b3_file(
             detected_mapping=detected_mapping,
             sample_rows=sample_rows,
             row_count=len(rows),
+            is_known_b3_format=_is_known_b3_format(headers),
         )
 
     # Parse the provided mapping
