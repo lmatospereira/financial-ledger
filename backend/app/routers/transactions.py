@@ -107,13 +107,14 @@ def delete_transaction(
 @router.post("/transactions/{transaction_id}/confirm", response_model=schemas.TransactionOut)
 def confirm_transaction(
     transaction_id: int,
+    payload: schemas.TransactionConfirm = schemas.TransactionConfirm(),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     try:
-        return crud.confirm_transaction(db, transaction_id, current_user.id)
+        return crud.confirm_transaction(db, transaction_id, current_user.id, payload.account_id)
     except KeyError:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transaction or account not found")
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="Transaction already confirmed"

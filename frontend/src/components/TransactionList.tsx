@@ -5,8 +5,8 @@ import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined'
 import CreditCardIcon from '@mui/icons-material/CreditCard'
 import RepeatIcon from '@mui/icons-material/Repeat'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
-import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined'
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -20,18 +20,22 @@ import {
   List,
   ListItem,
   ListItemText,
+  MenuItem,
   Stack,
+  TextField,
   Tooltip,
   Typography,
   useTheme,
 } from '@mui/material'
-import type { Transaction } from '../api/types'
+import type { Account, Transaction } from '../api/types'
+import { getApiErrorMessage } from '../api/client'
 
 interface TransactionListProps {
   transactions: Transaction[]
+  accounts: Account[]
   onEdit: (transaction: Transaction) => void
   onDelete: (transaction: Transaction) => Promise<void>
-  onConfirm?: (transaction: Transaction) => Promise<void>
+  onConfirm?: (transaction: Transaction, accountId: number) => Promise<void>
 }
 
 const currencyFormatter = new Intl.NumberFormat('pt-BR', {
@@ -110,6 +114,7 @@ function calculateDaySubtotal(transactions: Transaction[]): number {
 
 export default function TransactionList({
   transactions,
+  accounts,
   onEdit,
   onDelete,
   onConfirm,
@@ -117,7 +122,11 @@ export default function TransactionList({
   const theme = useTheme()
   const [pendingDelete, setPendingDelete] = useState<Transaction | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [confirming, setConfirming] = useState(false)
+
+  const [pendingPay, setPendingPay] = useState<Transaction | null>(null)
+  const [payAccountId, setPayAccountId] = useState<number | ''>('')
+  const [payError, setPayError] = useState<string | null>(null)
+  const [paying, setPaying] = useState(false)
 
   const sorted = [...transactions].sort((a, b) =>
     a.date === b.date ? b.id - a.id : a.date < b.date ? 1 : -1,
@@ -136,13 +145,23 @@ export default function TransactionList({
     }
   }
 
-  const handleConfirm = async (transaction: Transaction) => {
-    if (!onConfirm) return
-    setConfirming(true)
+  const openPayDialog = (transaction: Transaction) => {
+    setPendingPay(transaction)
+    setPayAccountId(transaction.account_id)
+    setPayError(null)
+  }
+
+  const handlePay = async () => {
+    if (!pendingPay || payAccountId === '' || !onConfirm) return
+    setPaying(true)
+    setPayError(null)
     try {
-      await onConfirm(transaction)
+      await onConfirm(pendingPay, payAccountId)
+      setPendingPay(null)
+    } catch (err) {
+      setPayError(getApiErrorMessage(err))
     } finally {
-      setConfirming(false)
+      setPaying(false)
     }
   }
 
@@ -206,20 +225,19 @@ export default function TransactionList({
                   <Box key={transaction.id}>
                     {transIndex > 0 && <Divider component="li" />}
                     <ListItem
-                      sx={{ py: 1.5 }}
+                      sx={{
+                        py: 1.5,
+                        ...(transaction.status === 'pending' && onConfirm
+                          ? { cursor: 'pointer' }
+                          : {}),
+                      }}
+                      onClick={
+                        transaction.status === 'pending' && onConfirm
+                          ? () => openPayDialog(transaction)
+                          : undefined
+                      }
                       secondaryAction={
                         <Stack direction="row" spacing={0.5}>
-                          {/* Show confirm button for pending transactions */}
-                          {transaction.status === 'pending' && onConfirm && (
-                            <IconButton
-                              aria-label="Confirmar"
-                              size="small"
-                              onClick={() => handleConfirm(transaction)}
-                              disabled={confirming}
-                            >
-                              <CheckCircleOutlinedIcon fontSize="small" />
-                            </IconButton>
-                          )}
                           {/* Transfers aren't editable through TransactionForm
                               (it never submits type: 'transfer') — hide Edit so
                               users aren't offered a broken flow. */}
@@ -227,7 +245,10 @@ export default function TransactionList({
                             <IconButton
                               aria-label="Editar"
                               size="small"
-                              onClick={() => onEdit(transaction)}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                onEdit(transaction)
+                              }}
                             >
                               <EditOutlinedIcon fontSize="small" />
                             </IconButton>
@@ -235,7 +256,10 @@ export default function TransactionList({
                           <IconButton
                             aria-label="Excluir"
                             size="small"
-                            onClick={() => setPendingDelete(transaction)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setPendingDelete(transaction)
+                            }}
                           >
                             <DeleteOutlineIcon fontSize="small" />
                           </IconButton>
@@ -371,6 +395,41 @@ export default function TransactionList({
           </Button>
           <Button color="error" variant="contained" onClick={confirmDelete} disabled={deleting}>
             Excluir
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(pendingPay)} onClose={() => setPendingPay(null)} fullWidth maxWidth="xs">
+        <DialogTitle>Pagar lançamento</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2.5} sx={{ mt: 1 }}>
+            {payError && <Alert severity="error">{payError}</Alert>}
+            <Typography variant="body2" color="text.secondary">
+              {pendingPay?.description} —{' '}
+              {pendingPay && currencyFormatter.format(pendingPay.amount)}
+            </Typography>
+            <TextField
+              select
+              label="Conta"
+              value={payAccountId}
+              onChange={(e) => setPayAccountId(e.target.value === '' ? '' : Number(e.target.value))}
+              fullWidth
+              autoFocus
+            >
+              {accounts.map((account) => (
+                <MenuItem key={account.id} value={account.id}>
+                  {account.name}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setPendingPay(null)} disabled={paying}>
+            Cancelar
+          </Button>
+          <Button variant="contained" onClick={handlePay} disabled={paying}>
+            Pagar
           </Button>
         </DialogActions>
       </Dialog>
