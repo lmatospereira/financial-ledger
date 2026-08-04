@@ -2,7 +2,7 @@
 
 Referência única para qualquer trabalho de UI neste projeto (páginas novas, componentes, revisões visuais). Baseado em MUI (Material Design), elevado com tokens próprios — não é uma reformulação para fora do Material Design, é um refinamento dele. Suporta modo claro e escuro.
 
-Linguagem visual inspirada no fintech brasileiro (referência: Nubank) — roxo como cor de marca, formas bem arredondadas, tipografia confiante, números grandes em destaque. **Isso é só inspiração de linguagem visual (cor, forma, tipografia) — nunca usar o nome, logo, wordmark ou qualquer elemento de marca registrada de terceiros na interface.**
+Linguagem visual baseada no template Berry Free React Admin Dashboard — azul como cor primária, roxo para secundária, formas bem arredondadas, tipografia confiante, números grandes em destaque.
 
 ## Paleta
 
@@ -10,11 +10,16 @@ Definida em `src/theme.ts` como uma função `getTheme(mode: 'light' | 'dark')` 
 
 | Token | Claro | Escuro |
 |---|---|---|
-| `primary` | `#820AD1` (roxo) | `#C084F5` (roxo mais claro, contraste em fundo escuro) |
-| `secondary` | `#F5E6FF` (lilás bem claro, uso em destaques sutis) | `#3D2255` (roxo escuro acinzentado) |
-| `background.default` | `#FAFAFA` | `#121016` |
-| `background.paper` | `#FFFFFF` | `#1C1922` |
-| `success` / `error` | verde/vermelho padrão MUI, ajustado pro tom | idem, tom mais claro pra contraste |
+| `primary` | `#2196f3` (azul) | `#2196f3` (azul consistente) |
+| `primary.light` | `#e3f2fd` (azul bem claro) | `#e3f2fd` |
+| `primary.dark` | `#1e88e5` (azul mais escuro) | `#1e88e5` |
+| `secondary` | `#673ab7` (roxo) | `#7c4dff` (roxo mais claro para contraste) |
+| `secondary.light` | `#ede7f6` (roxo bem claro) | `#d1c4e9` |
+| `secondary.dark` | `#5e35b1` | `#651fff` |
+| `background.default` | `#f8fafc` | `#1a223f` |
+| `background.paper` | `#ffffff` | `#111936` |
+| `success` | `#00e676` (verde) | `#00e676` |
+| `error` | `#f44336` (vermelho) | `#f44336` |
 
 Cores de categoria/conta (escolhidas pelo usuário no color picker) continuam livres — não fazem parte da paleta do tema.
 

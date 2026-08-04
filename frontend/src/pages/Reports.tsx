@@ -2,8 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import TrendingDownIcon from '@mui/icons-material/TrendingDown'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
-import { BarChart } from '@mui/x-charts/BarChart'
-import { PieChart } from '@mui/x-charts/PieChart'
+import Chart from 'react-apexcharts'
 import {
   Alert,
   Box,
@@ -242,28 +241,63 @@ export default function Reports() {
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
               Receitas x despesas por mês ({year})
             </Typography>
-            <BarChart
-              height={320}
-              dataset={trendChartData}
-              xAxis={[{ scaleType: 'band', dataKey: 'label' }]}
+            <Chart
+              options={{
+                chart: {
+                  type: 'bar',
+                  fontFamily: 'Nunito, Roboto, sans-serif',
+                  toolbar: { show: false },
+                },
+                plotOptions: {
+                  bar: {
+                    horizontal: false,
+                    columnWidth: '65%',
+                    dataLabels: {
+                      position: 'top',
+                    },
+                  },
+                },
+                dataLabels: {
+                  enabled: false,
+                },
+                xaxis: {
+                  categories: trendChartData.map((item) => item.label),
+                  axisBorder: {
+                    show: false,
+                  },
+                  axisTicks: {
+                    show: false,
+                  },
+                },
+                yaxis: {
+                  labels: {
+                    formatter: (val: number) => currencyFormatter.format(val),
+                  },
+                },
+                tooltip: {
+                  y: {
+                    formatter: (val: number) => currencyFormatter.format(val),
+                  },
+                },
+                colors: [theme.palette.success.main, theme.palette.error.main],
+                legend: {
+                  position: 'top',
+                  fontSize: '14px',
+                  fontFamily: 'Nunito, Roboto, sans-serif',
+                },
+              }}
               series={[
                 {
-                  dataKey: 'income',
-                  label: 'Receitas',
-                  color: theme.palette.success.main,
-                  valueFormatter: (value: number | null) =>
-                    currencyFormatter.format(value ?? 0),
+                  name: 'Receitas',
+                  data: trendChartData.map((item) => item.income),
                 },
                 {
-                  dataKey: 'expense',
-                  label: 'Despesas',
-                  color: theme.palette.error.main,
-                  valueFormatter: (value: number | null) =>
-                    currencyFormatter.format(value ?? 0),
+                  name: 'Despesas',
+                  data: trendChartData.map((item) => item.expense),
                 },
-              ]}
-              slotProps={{ legend: { position: { vertical: 'top', horizontal: 'end' } } }}
-              margin={{ top: 40 }}
+              ] as any}
+              type="bar"
+              height={320}
             />
           </CardContent>
         </Card>
@@ -286,21 +320,39 @@ export default function Reports() {
             ) : (
               <Grid container spacing={2} sx={{ alignItems: 'center' }}>
                 <Grid size={{ xs: 12 }}>
-                  <PieChart
-                    height={320}
-                    series={[
-                      {
-                        data: pieData,
-                        innerRadius: 50,
-                        paddingAngle: 2,
-                        cornerRadius: 4,
-                        valueFormatter: (item: { value: number }) =>
-                          currencyFormatter.format(item.value),
+                  <Chart
+                    options={{
+                      chart: {
+                        type: 'donut',
+                        fontFamily: 'Nunito, Roboto, sans-serif',
+                        toolbar: { show: false },
                       },
-                    ]}
-                    slotProps={{
-                      legend: { direction: 'vertical', position: { vertical: 'middle', horizontal: 'end' } },
+                      labels: pieData.map((item) => item.label),
+                      colors: pieData.map((item) => item.color),
+                      plotOptions: {
+                        pie: {
+                          donut: {
+                            size: '65%',
+                          },
+                        },
+                      },
+                      dataLabels: {
+                        enabled: false,
+                      },
+                      tooltip: {
+                        y: {
+                          formatter: (val: number) => currencyFormatter.format(val),
+                        },
+                      },
+                      legend: {
+                        position: 'right',
+                        fontSize: '14px',
+                        fontFamily: 'Nunito, Roboto, sans-serif',
+                      },
                     }}
+                    series={pieData.map((item) => item.value) as any}
+                    type="donut"
+                    height={320}
                   />
                 </Grid>
               </Grid>
