@@ -171,6 +171,10 @@ class Asset(Base):
     name: Mapped[str | None] = mapped_column(String, nullable=True)
     # "acao" | "fii" | "etf" | "bdr" | "outro"
     asset_type: Mapped[str] = mapped_column(String, nullable=False)
+    # Manually-maintained current market price -- no live price feed exists
+    # yet (per the user's own "manual first, API later" call on investments),
+    # so profitability is only computable when the user keeps this updated.
+    current_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
