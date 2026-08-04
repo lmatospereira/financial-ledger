@@ -1083,6 +1083,7 @@ def _aggregate_investment_movements(
             quantity_held -= movement.quantity
         elif movement.movement_type in ("bonificacao", "desdobramento"):
             quantity_held += movement.quantity
+            total_bought += movement.quantity
 
     avg_price = total_cost / total_bought if total_bought > 0 else 0.0
     invested_value = quantity_held * avg_price
