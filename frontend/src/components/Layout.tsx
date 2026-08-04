@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { useTheme, useMediaQuery, alpha } from '@mui/material'
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet'
 import KeyOutlinedIcon from '@mui/icons-material/KeyOutlined'
 import LogoutIcon from '@mui/icons-material/Logout'
@@ -11,8 +12,6 @@ import {
   AppBar,
   Avatar,
   Box,
-  Button,
-  Container,
   Divider,
   Drawer,
   IconButton,
@@ -39,15 +38,19 @@ interface NavItem {
   path: string
 }
 
+const SIDEBAR_WIDTH = 280
+
 export default function Layout({ children }: LayoutProps) {
   const navigate = useNavigate()
   const location = useLocation()
+  const theme = useTheme()
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'))
   const { signOut, currentUser } = useAuth()
   const { resolvedMode, setMode } = useThemeMode()
 
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const handleLogout = () => {
     setMenuAnchor(null)
@@ -77,49 +80,136 @@ export default function Layout({ children }: LayoutProps) {
     ...(currentUser?.is_admin ? [{ label: 'Usuários', path: '/users' }] : []),
   ]
 
+  const handleNavClick = (path: string) => {
+    navigate(path)
+    if (isMobile) {
+      setSidebarOpen(false)
+    }
+  }
+
+  // Sidebar content (shared between permanent and temporary drawer)
+  const sidebarContent = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Logo section */}
+      <Box
+        sx={{
+          px: 2,
+          py: 3,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          borderBottom: `1px solid ${theme.palette.divider}`,
+        }}
+      >
+        <AccountBalanceWalletIcon color="primary" sx={{ fontSize: 28 }} />
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 700,
+            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.light} 100%)`,
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}
+        >
+          Livro Caixa
+        </Typography>
+      </Box>
+
+      {/* Navigation menu */}
+      <List sx={{ flex: 1, px: 1, py: 2 }}>
+        {navItems.map((item) => {
+          const isActive = location.pathname === item.path
+          return (
+            <ListItemButton
+              key={item.path}
+              onClick={() => handleNavClick(item.path)}
+              selected={isActive}
+              sx={{
+                mb: 0.5,
+                borderRadius: 2,
+                px: 2,
+                py: 1.25,
+                color: isActive ? 'primary.main' : 'text.primary',
+                backgroundColor: isActive ? alpha(theme.palette.primary.main, 0.12) : 'transparent',
+                fontWeight: isActive ? 600 : 500,
+                '&:hover': {
+                  backgroundColor: alpha(theme.palette.primary.main, 0.08),
+                },
+              }}
+            >
+              <ListItemText primary={item.label} />
+            </ListItemButton>
+          )
+        })}
+      </List>
+
+      {/* Footer info */}
+      <Box
+        sx={{
+          px: 2,
+          py: 2,
+          borderTop: `1px solid ${theme.palette.divider}`,
+          textAlign: 'center',
+        }}
+      >
+        <Typography variant="caption" color="text.secondary">
+          {currentUser && `Conectado como ${currentUser.username}`}
+        </Typography>
+      </Box>
+    </Box>
+  )
+
   return (
-    <Box sx={{ minHeight: '100%', bgcolor: 'background.default' }}>
-      <AppBar position="sticky" color="inherit" sx={{ bgcolor: 'background.paper' }}>
-        <Toolbar sx={{ gap: 1 }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'background.default' }}>
+      {/* Top AppBar */}
+      <AppBar
+        position="fixed"
+        color="inherit"
+        sx={{
+          bgcolor: 'background.paper',
+          width: { xs: '100%', md: `calc(100% - ${SIDEBAR_WIDTH}px)` },
+          ml: { xs: 0, md: `${SIDEBAR_WIDTH}px` },
+          borderBottom: `1px solid ${theme.palette.divider}`,
+        }}
+      >
+        <Toolbar sx={{ gap: 2 }}>
+          {/* Menu toggle for mobile */}
           <IconButton
-            aria-label="Menu"
-            onClick={() => setMobileDrawerOpen(true)}
+            aria-label="Toggle sidebar"
+            onClick={() => setSidebarOpen(true)}
             size="small"
-            sx={{ display: { xs: 'flex', md: 'none' }, mr: 1 }}
+            sx={{ display: { xs: 'flex', md: 'none' } }}
           >
             <MenuIcon />
           </IconButton>
-          <AccountBalanceWalletIcon color="primary" />
-          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
-            Livro Caixa
-          </Typography>
-          <Stack
-            direction="row"
-            spacing={1}
-            sx={{ display: { xs: 'none', md: 'flex' } }}
-          >
-            {navItems.map((item) => (
-              <Button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                variant={location.pathname === item.path ? 'contained' : 'text'}
-                size="small"
+
+          {/* Spacer */}
+          <Box sx={{ flex: 1 }} />
+
+          {/* User profile menu */}
+          <Stack direction="row" spacing={1}>
+            <IconButton
+              aria-label="User menu"
+              onClick={(e) => setMenuAnchor(e.currentTarget)}
+              size="small"
+            >
+              <Avatar
+                sx={{
+                  width: 36,
+                  height: 36,
+                  bgcolor: 'primary.main',
+                  fontSize: 14,
+                  fontWeight: 600,
+                }}
               >
-                {item.label}
-              </Button>
-            ))}
+                {currentUser?.username.slice(0, 1).toUpperCase() ?? (
+                  <PersonOutlineIcon fontSize="small" />
+                )}
+              </Avatar>
+            </IconButton>
           </Stack>
 
-          <IconButton
-            aria-label="Conta"
-            onClick={(e) => setMenuAnchor(e.currentTarget)}
-            size="small"
-            sx={{ ml: 1 }}
-          >
-            <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main', fontSize: 14 }}>
-              {currentUser?.username.slice(0, 1).toUpperCase() ?? <PersonOutlineIcon fontSize="small" />}
-            </Avatar>
-          </IconButton>
           <Menu
             anchorEl={menuAnchor}
             open={Boolean(menuAnchor)}
@@ -171,31 +261,75 @@ export default function Layout({ children }: LayoutProps) {
         </Toolbar>
       </AppBar>
 
-      <Drawer
-        anchor="left"
-        open={mobileDrawerOpen}
-        onClose={() => setMobileDrawerOpen(false)}
+      {/* Sidebar - Permanent on desktop, Temporary on mobile */}
+      <Box component="nav" sx={{ width: { xs: 'auto', md: SIDEBAR_WIDTH }, flexShrink: { md: 0 } }}>
+        {isMobile ? (
+          // Temporary drawer for mobile
+          <Drawer
+            anchor="left"
+            open={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            slotProps={{
+              paper: {
+                sx: {
+                  width: SIDEBAR_WIDTH,
+                  bgcolor: 'background.paper',
+                  borderRight: `1px solid ${theme.palette.divider}`,
+                },
+              },
+            }}
+          >
+            {sidebarContent}
+          </Drawer>
+        ) : (
+          // Permanent drawer for desktop
+          <Drawer
+            variant="permanent"
+            anchor="left"
+            slotProps={{
+              paper: {
+                sx: {
+                  position: 'fixed',
+                  width: SIDEBAR_WIDTH,
+                  height: '100vh',
+                  bgcolor: 'background.paper',
+                  borderRight: `1px solid ${theme.palette.divider}`,
+                },
+              },
+            }}
+            sx={{
+              '& .MuiDrawer-paper': {
+                boxSizing: 'border-box',
+              },
+            }}
+          >
+            {sidebarContent}
+          </Drawer>
+        )}
+      </Box>
+
+      {/* Main content area */}
+      <Box
+        component="main"
+        sx={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          mt: 8,
+          minHeight: '100vh',
+        }}
       >
-        <Box sx={{ width: 280, py: 2 }}>
-          <List disablePadding>
-            {navItems.map((item) => (
-              <ListItemButton
-                key={item.path}
-                onClick={() => {
-                  navigate(item.path)
-                  setMobileDrawerOpen(false)
-                }}
-                selected={location.pathname === item.path}
-              >
-                <ListItemText primary={item.label} />
-              </ListItemButton>
-            ))}
-          </List>
+        {/* Content */}
+        <Box
+          sx={{
+            flex: 1,
+            p: { xs: 2, sm: 3 },
+            overflow: 'auto',
+          }}
+        >
+          {children}
         </Box>
-      </Drawer>
-      <Container maxWidth="md" sx={{ py: { xs: 2, sm: 4 } }}>
-        {children}
-      </Container>
+      </Box>
 
       <ChangePasswordDialog
         open={passwordDialogOpen}
