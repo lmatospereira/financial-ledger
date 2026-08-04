@@ -423,6 +423,7 @@ class AssetBase(BaseModel):
     ticker: str
     name: Optional[str] = None
     asset_type: Literal["acao", "fii", "etf", "bdr", "outro"]
+    current_price: Optional[float] = Field(default=None, ge=0, le=MAX_AMOUNT)
 
 
 class AssetCreate(AssetBase):
@@ -432,6 +433,7 @@ class AssetCreate(AssetBase):
 class AssetUpdate(BaseModel):
     name: Optional[str] = None
     asset_type: Optional[Literal["acao", "fii", "etf", "bdr", "outro"]] = None
+    current_price: Optional[float] = Field(default=None, ge=0, le=MAX_AMOUNT)
 
 
 class AssetOut(AssetBase):
@@ -487,6 +489,12 @@ class PortfolioPositionOut(BaseModel):
     quantity_held: float
     avg_price: float
     total_invested: float
+    # Only populated when the asset's current_price has been set manually
+    # (no live price feed exists yet) -- None means "unknown, not tracked".
+    current_price: Optional[float] = None
+    current_value: Optional[float] = None
+    profit_loss: Optional[float] = None
+    profit_loss_pct: Optional[float] = None
 
 
 # ---------- Import Preview Response ----------

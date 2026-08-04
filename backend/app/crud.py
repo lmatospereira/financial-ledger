@@ -1051,6 +1051,16 @@ def get_portfolio(db: Session, user_id: int) -> list[schemas.PortfolioPositionOu
         avg_price = total_cost / total_bought if total_bought > 0 else 0.0
         total_invested = quantity_held * avg_price
 
+        # Profitability only computable when the user has manually kept
+        # current_price up to date (no live price feed exists yet).
+        current_value = None
+        profit_loss = None
+        profit_loss_pct = None
+        if asset.current_price is not None:
+            current_value = quantity_held * asset.current_price
+            profit_loss = current_value - total_invested
+            profit_loss_pct = (profit_loss / total_invested * 100) if total_invested > 0 else None
+
         results.append(
             schemas.PortfolioPositionOut(
                 ticker=asset.ticker,
@@ -1059,6 +1069,10 @@ def get_portfolio(db: Session, user_id: int) -> list[schemas.PortfolioPositionOu
                 quantity_held=quantity_held,
                 avg_price=avg_price,
                 total_invested=total_invested,
+                current_price=asset.current_price,
+                current_value=current_value,
+                profit_loss=profit_loss,
+                profit_loss_pct=profit_loss_pct,
             )
         )
 
