@@ -1,19 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import AddIcon from '@mui/icons-material/Add'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutlineOutlined'
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
+import { BarChart } from '@mui/x-charts/BarChart'
+import { PieChart } from '@mui/x-charts/PieChart'
 import {
   Alert,
   Box,
   Button,
   Card,
+  CardContent,
   Chip,
   CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
+  DialogContentText,
   DialogTitle,
   Fab,
+  IconButton,
   MenuItem,
   Stack,
   Table,
@@ -24,19 +31,25 @@ import {
   TableRow,
   TextField,
   Typography,
+  useTheme,
 } from '@mui/material'
 import Layout from '../components/Layout'
 import {
   createAsset,
   createInvestmentMovement,
+  deleteInvestmentMovement,
   getApiErrorMessage,
   getAssets,
+  getInvestmentMovements,
   getPortfolio,
   importInvestmentsFile,
+  updateAsset,
+  updateInvestmentMovement,
 } from '../api/client'
 import type {
   Asset,
   AssetType,
+  InvestmentMovement,
   InvestmentMovementInput,
   ImportPreviewResponse,
   MovementType,
@@ -48,6 +61,11 @@ const currencyFormatter = new Intl.NumberFormat('pt-BR', {
   currency: 'BRL',
 })
 
+const dateFormatter = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+})
 
 const assetTypeLabels: Record<AssetType, string> = {
   acao: 'Ação',
@@ -66,6 +84,11 @@ const movementTypeLabels: Record<string, string> = {
   outro: 'Outro',
 }
 
+function formatDate(iso: string): string {
+  const [year, month, day] = iso.split('-').map(Number)
+  return dateFormatter.format(new Date(year, month - 1, day))
+}
+
 const emptyMovementForm: InvestmentMovementInput = {
   asset_id: 0,
   date: new Date().toISOString().split('T')[0],
@@ -76,8 +99,10 @@ const emptyMovementForm: InvestmentMovementInput = {
 }
 
 export default function Investments() {
+  const theme = useTheme()
   const [portfolio, setPortfolio] = useState<PortfolioPosition[]>([])
   const [assets, setAssets] = useState<Asset[]>([])
+  const [movements, setMovements] = useState<InvestmentMovement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -88,6 +113,7 @@ export default function Investments() {
   const [submitting, setSubmitting] = useState(false)
   const [newTicker, setNewTicker] = useState<string>('')
   const [newAssetType, setNewAssetType] = useState<AssetType>('acao')
+  const [editingMovement, setEditingMovement] = useState<InvestmentMovement | null>(null)
 
   // B3 import dialog
   const [importDialogOpen, setImportDialogOpen] = useState(false)
@@ -106,15 +132,30 @@ export default function Investments() {
     movements_created: number
   } | null>(null)
 
+  // Edit current price dialog
+  const [priceEditPosition, setPriceEditPosition] = useState<PortfolioPosition | null>(null)
+  const [priceEditValue, setPriceEditValue] = useState<string>('')
+  const [priceEditLoading, setPriceEditLoading] = useState(false)
+  const [priceEditError, setPriceEditError] = useState<string | null>(null)
+
+  // Delete movement dialog
+  const [pendingDeleteMovement, setPendingDeleteMovement] = useState<InvestmentMovement | null>(null)
+  const [deletingMovement, setDeletingMovement] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadData = async () => {
     setLoading(true)
     setError(null)
     try {
-      const [portfolioData, assetsData] = await Promise.all([getPortfolio(), getAssets()])
+      const [portfolioData, assetsData, movementsData] = await Promise.all([
+        getPortfolio(),
+        getAssets(),
+        getInvestmentMovements(),
+      ])
       setPortfolio(portfolioData)
       setAssets(assetsData)
+      setMovements(movementsData)
     } catch (err) {
       setError(getApiErrorMessage(err))
     } finally {
@@ -127,9 +168,27 @@ export default function Investments() {
   }, [])
 
   const openCreateForm = () => {
+    setEditingMovement(null)
     setForm(emptyMovementForm)
     setNewTicker('')
     setNewAssetType('acao')
+    setFormError(null)
+    setFormOpen(true)
+  }
+
+  const openEditForm = (movement: InvestmentMovement) => {
+    const asset = assets.find((a) => a.id === movement.asset_id)
+    setEditingMovement(movement)
+    setForm({
+      asset_id: movement.asset_id,
+      date: movement.date,
+      movement_type: movement.movement_type,
+      quantity: movement.quantity,
+      unit_price: movement.unit_price,
+      total_value: movement.total_value,
+    })
+    setNewTicker(asset?.ticker || '')
+    setNewAssetType(asset?.asset_type || 'acao')
     setFormError(null)
     setFormOpen(true)
   }
@@ -153,40 +212,86 @@ export default function Investments() {
       return
     }
 
-    // Reuse the asset if this ticker already exists for the user; only
-    // create a new one the first time a ticker is used (the backend
-    // enforces one asset per ticker per user, so re-creating on every
-    // movement would fail with a conflict from the second movement on).
-    let assetId = assets.find((a) => a.ticker === ticker)?.id
-    if (!assetId) {
-      try {
-        setSubmitting(true)
-        const newAsset = await createAsset({
-          ticker,
-          name: null,
-          asset_type: newAssetType,
-        })
-        assetId = newAsset.id
-        setAssets((prev) => [...prev, newAsset])
-      } catch (err) {
-        setFormError(getApiErrorMessage(err))
-        setSubmitting(false)
-        return
-      }
-    }
-
     setSubmitting(true)
     try {
-      await createInvestmentMovement({
-        ...form,
-        asset_id: assetId,
-      })
+      if (editingMovement) {
+        // Editing existing movement
+        await updateInvestmentMovement(editingMovement.id, form)
+      } else {
+        // Creating new movement
+        let assetId = assets.find((a) => a.ticker === ticker)?.id
+        if (!assetId) {
+          const newAsset = await createAsset({
+            ticker,
+            name: null,
+            asset_type: newAssetType,
+            current_price: null as unknown as number | null,
+          })
+          assetId = newAsset.id
+          setAssets((prev) => [...prev, newAsset])
+        }
+        await createInvestmentMovement({
+          ...form,
+          asset_id: assetId,
+        })
+      }
       setFormOpen(false)
       await loadData()
     } catch (err) {
       setFormError(getApiErrorMessage(err))
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const openPriceEdit = (position: PortfolioPosition) => {
+    setPriceEditPosition(position)
+    setPriceEditValue(position.current_price ? position.current_price.toString() : '')
+    setPriceEditError(null)
+  }
+
+  const handleSavePrice = async () => {
+    if (!priceEditPosition) return
+
+    setPriceEditError(null)
+    const newPrice = priceEditValue.trim() ? Number(priceEditValue) : null
+
+    if (priceEditValue.trim() && (isNaN(newPrice as number) || (newPrice !== null && newPrice <= 0))) {
+      setPriceEditError('Informe um valor válido maior que zero.')
+      return
+    }
+
+    setPriceEditLoading(true)
+    try {
+      const asset = assets.find((a) => a.ticker === priceEditPosition.ticker)
+      if (asset) {
+        await updateAsset(asset.id, {
+          ticker: asset.ticker,
+          name: asset.name,
+          asset_type: asset.asset_type,
+          current_price: newPrice,
+        })
+        await loadData()
+        setPriceEditPosition(null)
+      }
+    } catch (err) {
+      setPriceEditError(getApiErrorMessage(err))
+    } finally {
+      setPriceEditLoading(false)
+    }
+  }
+
+  const confirmDeleteMovement = async () => {
+    if (!pendingDeleteMovement) return
+    setDeletingMovement(true)
+    try {
+      await deleteInvestmentMovement(pendingDeleteMovement.id)
+      setPendingDeleteMovement(null)
+      await loadData()
+    } catch (err) {
+      setError(getApiErrorMessage(err))
+    } finally {
+      setDeletingMovement(false)
     }
   }
 
@@ -258,6 +363,28 @@ export default function Investments() {
     setImportResult(null)
   }
 
+  // Calculate portfolio composition data for pie chart
+  const compositionData = portfolio
+    .filter((pos) => pos.total_invested > 0)
+    .map((pos) => ({
+      id: pos.ticker,
+      value: pos.total_invested,
+      label: pos.ticker,
+    }))
+
+  // Calculate profitability report data
+  const positionsWithPrice = portfolio.filter((pos) => pos.current_price !== null)
+  const totalInvestedWithPrice = positionsWithPrice.reduce((sum, pos) => sum + pos.total_invested, 0)
+  const totalCurrentValue = positionsWithPrice.reduce((sum, pos) => sum + (pos.current_value || 0), 0)
+  const totalProfitLoss = positionsWithPrice.reduce((sum, pos) => sum + (pos.profit_loss || 0), 0)
+  const totalProfitLossPercent = totalInvestedWithPrice > 0 ? (totalProfitLoss / totalInvestedWithPrice) * 100 : 0
+
+  const profitabilityChartData = positionsWithPrice.map((pos) => ({
+    ticker: pos.ticker,
+    invested: pos.total_invested,
+    current: pos.current_value || 0,
+  }))
+
   return (
     <Layout>
       <Stack spacing={3}>
@@ -284,68 +411,389 @@ export default function Investments() {
             </Box>
           </Card>
         ) : (
-          <TableContainer component={Card}>
-            <Table>
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'action.hover' }}>
-                  <TableCell sx={{ fontWeight: 700 }}>Ticker</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Tipo</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 700 }}>
-                    Quantidade
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 700 }}>
-                    Preço Médio
-                  </TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 700 }}>
-                    Total Investido
-                  </TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {portfolio.map((position) => (
-                  <TableRow key={position.ticker}>
-                    <TableCell>
-                      <Stack spacing={0.5}>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {position.ticker}
-                        </Typography>
-                        {position.name && (
-                          <Typography variant="caption" color="text.secondary">
-                            {position.name}
-                          </Typography>
-                        )}
-                      </Stack>
+          <>
+            {/* Composition Chart */}
+            <Card>
+              <CardContent>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                  Composição da Carteira
+                </Typography>
+                {compositionData.length === 0 ? (
+                  <Box sx={{ py: 6, textAlign: 'center', color: 'text.secondary' }}>
+                    <Typography variant="body1">
+                      Nenhuma posição com valor investido.
+                    </Typography>
+                  </Box>
+                ) : (
+                  <PieChart
+                    height={300}
+                    series={[
+                      {
+                        data: compositionData,
+                        innerRadius: 50,
+                        paddingAngle: 2,
+                        cornerRadius: 4,
+                        valueFormatter: (item: { value: number }) =>
+                          currencyFormatter.format(item.value),
+                      },
+                    ]}
+                    slotProps={{
+                      legend: { direction: 'vertical', position: { vertical: 'middle', horizontal: 'end' } },
+                    }}
+                  />
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Portfolio Table with Price Editing */}
+            <TableContainer component={Card}>
+              <Table>
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'action.hover' }}>
+                    <TableCell sx={{ fontWeight: 700 }}>Ticker</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Tipo</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Quantidade
                     </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={assetTypeLabels[position.asset_type as AssetType] || position.asset_type}
-                        size="small"
-                        variant="outlined"
-                      />
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Preço Médio
                     </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {position.quantity_held.toLocaleString('pt-BR', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })}
-                      </Typography>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Total Investido
                     </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {currencyFormatter.format(position.avg_price)}
-                      </Typography>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Preço Atual
                     </TableCell>
-                    <TableCell align="right">
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {currencyFormatter.format(position.total_invested)}
-                      </Typography>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Valor Atual
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700 }}>
+                      Lucro/Prejuízo
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {portfolio.map((position) => (
+                    <TableRow key={position.ticker}>
+                      <TableCell>
+                        <Stack spacing={0.5}>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {position.ticker}
+                          </Typography>
+                          {position.name && (
+                            <Typography variant="caption" color="text.secondary">
+                              {position.name}
+                            </Typography>
+                          )}
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={assetTypeLabels[position.asset_type as AssetType] || position.asset_type}
+                          size="small"
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {position.quantity_held.toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {currencyFormatter.format(position.avg_price)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {currencyFormatter.format(position.total_invested)}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'flex-end', alignItems: 'center' }}>
+                          {position.current_price !== null ? (
+                            <>
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                {currencyFormatter.format(position.current_price)}
+                              </Typography>
+                              <IconButton
+                                size="small"
+                                onClick={() => openPriceEdit(position)}
+                                sx={{ ml: 0.5 }}
+                              >
+                                <EditOutlinedIcon fontSize="small" />
+                              </IconButton>
+                            </>
+                          ) : (
+                            <>
+                              <Typography variant="body2" color="text.secondary">
+                                —
+                              </Typography>
+                              <IconButton
+                                size="small"
+                                onClick={() => openPriceEdit(position)}
+                              >
+                                <EditOutlinedIcon fontSize="small" />
+                              </IconButton>
+                            </>
+                          )}
+                        </Stack>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            fontWeight: 600,
+                            color: position.current_value === null ? 'text.secondary' : undefined,
+                          }}
+                        >
+                          {position.current_value !== null
+                            ? currencyFormatter.format(position.current_value)
+                            : '—'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Stack spacing={0.25}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: 600,
+                              color:
+                                position.profit_loss === null
+                                  ? 'text.secondary'
+                                  : position.profit_loss >= 0
+                                    ? 'success.main'
+                                    : 'error.main',
+                            }}
+                          >
+                            {position.profit_loss !== null
+                              ? currencyFormatter.format(position.profit_loss)
+                              : '—'}
+                          </Typography>
+                          {position.profit_loss_pct !== null && (
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: position.profit_loss_pct >= 0 ? 'success.main' : 'error.main',
+                              }}
+                            >
+                              {position.profit_loss_pct >= 0 ? '+' : ''}
+                              {position.profit_loss_pct.toFixed(2)}%
+                            </Typography>
+                          )}
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+
+            {/* Profitability Report */}
+            {positionsWithPrice.length > 0 && (
+              <>
+                <Card>
+                  <CardContent>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                      Rentabilidade
+                    </Typography>
+                    <Stack spacing={2}>
+                      <Typography variant="body2" color="text.secondary">
+                        {positionsWithPrice.length} de {portfolio.length} ativos com preço atual informado
+                      </Typography>
+                      <Stack direction="row" spacing={3}>
+                        <Stack>
+                          <Typography variant="caption" color="text.secondary">
+                            Total Investido
+                          </Typography>
+                          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                            {currencyFormatter.format(totalInvestedWithPrice)}
+                          </Typography>
+                        </Stack>
+                        <Stack>
+                          <Typography variant="caption" color="text.secondary">
+                            Valor Atual
+                          </Typography>
+                          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                            {currencyFormatter.format(totalCurrentValue)}
+                          </Typography>
+                        </Stack>
+                        <Stack>
+                          <Typography variant="caption" color="text.secondary">
+                            Lucro/Prejuízo
+                          </Typography>
+                          <Typography
+                            variant="h6"
+                            sx={{
+                              fontWeight: 700,
+                              color: totalProfitLoss >= 0 ? 'success.main' : 'error.main',
+                            }}
+                          >
+                            {currencyFormatter.format(totalProfitLoss)}
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: totalProfitLoss >= 0 ? 'success.main' : 'error.main',
+                            }}
+                          >
+                            {totalProfitLoss >= 0 ? '+' : ''}
+                            {totalProfitLossPercent.toFixed(2)}%
+                          </Typography>
+                        </Stack>
+                      </Stack>
+                    </Stack>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                      Valor Investido vs Valor Atual
+                    </Typography>
+                    <BarChart
+                      height={300}
+                      dataset={profitabilityChartData}
+                      xAxis={[{ scaleType: 'band', dataKey: 'ticker' }]}
+                      series={[
+                        {
+                          dataKey: 'invested',
+                          label: 'Investido',
+                          color: theme.palette.primary.main,
+                          valueFormatter: (value: number | null) =>
+                            currencyFormatter.format(value ?? 0),
+                        },
+                        {
+                          dataKey: 'current',
+                          label: 'Valor Atual',
+                          color: theme.palette.success.main,
+                          valueFormatter: (value: number | null) =>
+                            currencyFormatter.format(value ?? 0),
+                        },
+                      ]}
+                      slotProps={{ legend: { position: { vertical: 'top', horizontal: 'end' } } }}
+                      margin={{ top: 40 }}
+                    />
+                  </CardContent>
+                </Card>
+              </>
+            )}
+
+            {positionsWithPrice.length === 0 && (
+              <Card>
+                <Box sx={{ py: 6, textAlign: 'center', color: 'text.secondary' }}>
+                  <Typography variant="body1">
+                    Informe o preço atual dos seus ativos para acompanhar a rentabilidade.
+                  </Typography>
+                </Box>
+              </Card>
+            )}
+
+            {/* Movements List */}
+            <Card>
+              <CardContent>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                  Movimentações
+                </Typography>
+                {movements.length === 0 ? (
+                  <Box sx={{ py: 4, textAlign: 'center', color: 'text.secondary' }}>
+                    <Typography variant="body2">
+                      Nenhuma movimentação registrada.
+                    </Typography>
+                  </Box>
+                ) : (
+                  <TableContainer>
+                    <Table>
+                      <TableHead>
+                        <TableRow sx={{ bgcolor: 'action.hover' }}>
+                          <TableCell sx={{ fontWeight: 700 }}>Data</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Ticker</TableCell>
+                          <TableCell sx={{ fontWeight: 700 }}>Tipo</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>
+                            Quantidade
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>
+                            Preço Unitário
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700 }}>
+                            Valor Total
+                          </TableCell>
+                          <TableCell align="center" sx={{ fontWeight: 700 }}>
+                            Ações
+                          </TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {movements.map((movement) => {
+                          const asset = assets.find((a) => a.id === movement.asset_id)
+                          return (
+                            <TableRow key={movement.id}>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {formatDate(movement.date)}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  {asset?.ticker || '—'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={movementTypeLabels[movement.movement_type] || movement.movement_type}
+                                  size="small"
+                                  variant="outlined"
+                                />
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2">
+                                  {movement.quantity.toLocaleString('pt-BR', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2">
+                                  {movement.unit_price !== null
+                                    ? currencyFormatter.format(movement.unit_price)
+                                    : '—'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  {currencyFormatter.format(movement.total_value)}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="center">
+                                <Stack direction="row" spacing={0.5} sx={{ justifyContent: 'center' }}>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => openEditForm(movement)}
+                                  >
+                                    <EditOutlinedIcon fontSize="small" />
+                                  </IconButton>
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => setPendingDeleteMovement(movement)}
+                                  >
+                                    <DeleteOutlineIcon fontSize="small" />
+                                  </IconButton>
+                                </Stack>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </CardContent>
+            </Card>
+          </>
         )}
       </Stack>
 
@@ -371,7 +819,7 @@ export default function Investments() {
 
       {/* Manual Movement Dialog */}
       <Dialog open={formOpen} onClose={() => setFormOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>Nova movimentação</DialogTitle>
+        <DialogTitle>{editingMovement ? 'Editar movimentação' : 'Nova movimentação'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2.5} sx={{ mt: 1 }}>
             {formError && <Alert severity="error">{formError}</Alert>}
@@ -383,21 +831,24 @@ export default function Investments() {
               placeholder="Ex: PETR4"
               fullWidth
               autoFocus
+              disabled={editingMovement !== null}
             />
 
-            <TextField
-              select
-              label="Tipo de ativo"
-              value={newAssetType}
-              onChange={(e) => setNewAssetType(e.target.value as AssetType)}
-              fullWidth
-            >
-              {Object.entries(assetTypeLabels).map(([key, label]) => (
-                <MenuItem key={key} value={key}>
-                  {label}
-                </MenuItem>
-              ))}
-            </TextField>
+            {!editingMovement && (
+              <TextField
+                select
+                label="Tipo de ativo"
+                value={newAssetType}
+                onChange={(e) => setNewAssetType(e.target.value as AssetType)}
+                fullWidth
+              >
+                {Object.entries(assetTypeLabels).map(([key, label]) => (
+                  <MenuItem key={key} value={key}>
+                    {label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            )}
 
             <TextField
               select
@@ -495,7 +946,63 @@ export default function Investments() {
             Cancelar
           </Button>
           <Button variant="contained" onClick={handleSubmitMovement} disabled={submitting}>
-            Adicionar
+            {editingMovement ? 'Salvar' : 'Adicionar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Current Price Dialog */}
+      <Dialog open={Boolean(priceEditPosition)} onClose={() => setPriceEditPosition(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Editar Preço Atual</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2.5} sx={{ mt: 1 }}>
+            {priceEditError && <Alert severity="error">{priceEditError}</Alert>}
+            <Typography variant="body2" color="text.secondary">
+              {priceEditPosition?.ticker}
+            </Typography>
+            <TextField
+              label="Preço Atual (R$)"
+              inputMode="decimal"
+              placeholder="0,00"
+              value={priceEditValue}
+              onChange={(e) => setPriceEditValue(e.target.value)}
+              fullWidth
+              autoFocus
+              slotProps={{
+                input: {
+                  inputProps: {
+                    min: 0.01,
+                    step: 0.01,
+                  },
+                },
+              }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setPriceEditPosition(null)} disabled={priceEditLoading}>
+            Cancelar
+          </Button>
+          <Button variant="contained" onClick={handleSavePrice} disabled={priceEditLoading}>
+            Salvar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Movement Dialog */}
+      <Dialog open={Boolean(pendingDeleteMovement)} onClose={() => setPendingDeleteMovement(null)}>
+        <DialogTitle>Excluir movimentação?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Tem certeza que deseja excluir esta movimentação? Essa ação não pode ser desfeita.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setPendingDeleteMovement(null)} disabled={deletingMovement}>
+            Cancelar
+          </Button>
+          <Button color="error" variant="contained" onClick={confirmDeleteMovement} disabled={deletingMovement}>
+            Excluir
           </Button>
         </DialogActions>
       </Dialog>

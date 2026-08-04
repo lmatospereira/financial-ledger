@@ -266,6 +266,7 @@ export interface Asset {
   ticker: string
   name: string | null
   asset_type: AssetType
+  current_price: number | null
   created_at: string
 }
 
@@ -291,6 +292,10 @@ export interface PortfolioPosition {
   quantity_held: number
   avg_price: number
   total_invested: number
+  current_price: number | null
+  current_value: number | null
+  profit_loss: number | null
+  profit_loss_pct: number | null
 }
 
 export interface ImportPreviewResponse {
