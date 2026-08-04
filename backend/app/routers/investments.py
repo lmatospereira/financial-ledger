@@ -347,6 +347,78 @@ def get_portfolio(
     return crud.get_portfolio(db, current_user.id)
 
 
+# ========== Position History (Snapshots) ==========
+@router.get("/positions/history", response_model=list[schemas.PositionSnapshotOut] | list[schemas.ConsolidatedPositionOut])
+def get_position_history(
+    asset_id: Optional[int] = None,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get position history over time.
+
+    If asset_id is provided: return snapshots for that asset (404 if not owned by user).
+    If asset_id is omitted: return consolidated (summed) invested value per date across all assets.
+    The consolidation uses a carry-forward approach: for dates where an asset has no snapshot,
+    its last known position is carried forward (or 0 if no previous snapshot exists).
+    """
+    if asset_id is not None:
+        # Single asset: verify it belongs to the user
+        asset = crud.get_asset(db, asset_id, current_user.id)
+        if asset is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+
+        snapshots = crud.get_position_snapshots_for_asset(db, asset_id, current_user.id)
+        return [
+            schemas.PositionSnapshotOut(
+                date=s.date,
+                asset_id=s.asset_id,
+                quantity_held=s.quantity_held,
+                invested_value=s.invested_value,
+            )
+            for s in snapshots
+        ]
+    else:
+        # Consolidated: merge snapshots from all assets, carrying forward last-known values per asset
+        all_snapshots = crud.get_position_snapshots_for_user(db, current_user.id)
+
+        if not all_snapshots:
+            return []
+
+        # Build a map of (asset_id -> list of snapshots sorted by date)
+        snapshots_by_asset: dict[int, list[models.InvestmentPositionSnapshot]] = {}
+        all_dates = set()
+        for snapshot in all_snapshots:
+            if snapshot.asset_id not in snapshots_by_asset:
+                snapshots_by_asset[snapshot.asset_id] = []
+            snapshots_by_asset[snapshot.asset_id].append(snapshot)
+            all_dates.add(snapshot.date)
+
+        # For each date, compute total invested value by carrying forward last-known values
+        # for each asset (or 0 if no previous snapshot exists for that asset).
+        # Approach: for each date in sorted order, for each asset, find its latest snapshot
+        # on or before that date.
+        result_by_date: dict[date, float] = {}
+
+        for current_date in sorted(all_dates):
+            total_invested = 0.0
+            for asset_id, snapshots_for_asset in snapshots_by_asset.items():
+                # Find the latest snapshot on or before current_date
+                latest_value = 0.0
+                for snapshot in snapshots_for_asset:
+                    if snapshot.date <= current_date:
+                        latest_value = snapshot.invested_value
+                    else:
+                        break
+                total_invested += latest_value
+
+            result_by_date[current_date] = total_invested
+
+        return [
+            schemas.ConsolidatedPositionOut(date=d, total_invested_value=v)
+            for d, v in sorted(result_by_date.items())
+        ]
+
+
 # ========== B3 File Import ==========
 @router.post("/import")
 def import_b3_file(
@@ -436,6 +508,8 @@ def import_b3_file(
     # Process each row: create asset if needed, then create movement
     assets_created = 0
     movements_created = 0
+    # Track assets affected by this import so we can rebuild their snapshots
+    affected_asset_ids = set()
 
     for row in rows:
         # Extract mapped values
@@ -507,7 +581,9 @@ def import_b3_file(
                 )
                 assets_created += 1
 
-            # Create movement
+            affected_asset_ids.add(asset.id)
+
+            # Create movement (this will trigger a rebuild for this asset)
             crud.create_investment_movement(
                 db,
                 current_user.id,

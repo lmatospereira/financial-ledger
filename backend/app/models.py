@@ -198,3 +198,24 @@ class InvestmentMovement(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
+
+
+class InvestmentPositionSnapshot(Base):
+    __tablename__ = "investment_position_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id"), nullable=False, index=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    # Quantity held as of this date (after all movements up to and including this date)
+    quantity_held: Mapped[float] = mapped_column(Float, nullable=False)
+    # Total invested amount (cost basis) as of this date
+    invested_value: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    # Unique constraint: one snapshot per (user_id, asset_id, date)
+    __table_args__ = (
+        UniqueConstraint("user_id", "asset_id", "date", name="uq_position_snapshots_user_asset_date"),
+    )
