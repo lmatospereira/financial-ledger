@@ -304,6 +304,7 @@ export interface ImportPreviewResponse {
   detected_mapping: Record<string, string | null>
   sample_rows: Record<string, string>[]
   row_count: number
+  is_known_b3_format: boolean
 }
 
 export interface ImportCommitResponse {
