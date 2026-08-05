@@ -247,6 +247,8 @@ export default function Reports() {
                   type: 'bar',
                   fontFamily: 'Nunito, Roboto, sans-serif',
                   toolbar: { show: false },
+                  theme: { mode: theme.palette.mode },
+                  foreColor: theme.palette.text.secondary,
                 },
                 plotOptions: {
                   bar: {
@@ -285,7 +287,7 @@ export default function Reports() {
                   fontSize: '14px',
                   fontFamily: 'Nunito, Roboto, sans-serif',
                 },
-              }}
+              } as any}
               series={[
                 {
                   name: 'Receitas',
@@ -326,6 +328,8 @@ export default function Reports() {
                         type: 'donut',
                         fontFamily: 'Nunito, Roboto, sans-serif',
                         toolbar: { show: false },
+                        theme: { mode: theme.palette.mode },
+                        foreColor: theme.palette.text.secondary,
                       },
                       labels: pieData.map((item) => item.label),
                       colors: pieData.map((item) => item.color),
@@ -349,7 +353,7 @@ export default function Reports() {
                         fontSize: '14px',
                         fontFamily: 'Nunito, Roboto, sans-serif',
                       },
-                    }}
+                    } as any}
                     series={pieData.map((item) => item.value) as any}
                     type="donut"
                     height={320}
