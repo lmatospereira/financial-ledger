@@ -481,8 +481,10 @@ export default function Investments() {
     // Group by month
     const byMonth = proventoMovements.reduce(
       (acc, m) => {
-        const date = new Date(m.date)
-        const yearMonth = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        // m.date is "YYYY-MM-DD" -- slice instead of `new Date(m.date)`, which
+        // parses as UTC and can shift into the wrong month in negative-UTC
+        // timezones (e.g. a provento on the 1st landing in the prior month).
+        const yearMonth = m.date.slice(0, 7)
         acc[yearMonth] = (acc[yearMonth] || 0) + (m.total_value || 0)
         return acc
       },
