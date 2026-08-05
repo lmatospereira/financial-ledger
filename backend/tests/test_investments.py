@@ -1048,3 +1048,53 @@ def test_new_asset_types_tesouro_and_renda_fixa(client, auth_headers):
     assert len(assets) == 2
     asset_types = {a["asset_type"] for a in assets}
     assert "tesouro" in asset_types or "renda_fixa" in asset_types
+
+
+def test_import_guesses_fixed_income_asset_types(client, auth_headers):
+    """Test that B3 import correctly guesses fixed income asset types (tesouro/renda_fixa).
+
+    This is a regression test for the bug where fixed income products like
+    "Tesouro IPCA+ 2035" or "CDB - CDB3266WRKT - ITAU..." were incorrectly
+    classified as "outro" instead of "tesouro"/"renda_fixa".
+
+    Note: the _extract_ticker() function splits on " - " and takes the first
+    part, so the ticker stored will be "Tesouro IPCA+ 2035", "CDB", "LCI",
+    "Tesouro Selic 2026" (not the full product names).
+    """
+    csv_content = (
+        "Data,Produto,Movimentação,Quantidade,Preço,Valor\n"
+        "2026-01-15,Tesouro IPCA+ 2035,Compra,10,100.00,1000.00\n"
+        "2026-01-16,CDB - CDB3266WRKT - ITAU UNIBANCO S/A,Compra,1,1000.00,1000.00\n"
+        "2026-01-17,LCI - ITAU,Compra,1,500.00,500.00\n"
+        "2026-01-18,Tesouro Selic 2026,Compra,5,50.00,250.00\n"
+    )
+    mapping = {
+        "date": "Data",
+        "ticker": "Produto",
+        "movement_type": "Movimentação",
+        "quantity": "Quantidade",
+        "unit_price": "Preço",
+        "total_value": "Valor",
+    }
+
+    response = client.post(
+        "/api/investments/import",
+        files={"file": ("mov.csv", csv_content.encode(), "text/csv")},
+        data={"column_mapping": json.dumps(mapping)},
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["committed"] is True
+    assert body["assets_created"] == 4
+
+    # Verify assets were created with correct types
+    assets_by_ticker = {a["ticker"]: a for a in client.get("/api/investments/assets", headers=auth_headers).json()}
+
+    # Tesouro products should be guessed as "tesouro"
+    assert assets_by_ticker["Tesouro IPCA+ 2035"]["asset_type"] == "tesouro"
+    assert assets_by_ticker["Tesouro Selic 2026"]["asset_type"] == "tesouro"
+
+    # CDB and LCI products should be guessed as "renda_fixa"
+    assert assets_by_ticker["CDB"]["asset_type"] == "renda_fixa"
+    assert assets_by_ticker["LCI"]["asset_type"] == "renda_fixa"
