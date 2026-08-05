@@ -5,9 +5,7 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import TrendingUpIcon from '@mui/icons-material/TrendingUp'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import { BarChart } from '@mui/x-charts/BarChart'
-import { LineChart } from '@mui/x-charts/LineChart'
-import { PieChart } from '@mui/x-charts/PieChart'
+import Chart from 'react-apexcharts'
 import {
   Alert,
   Box,
@@ -603,21 +601,46 @@ export default function Investments() {
                     </Box>
                   ) : (
                     <>
-                      <PieChart
-                        height={300}
-                        series={[
-                          {
-                            data: categoryCompositionData,
-                            innerRadius: 50,
-                            paddingAngle: 2,
-                            cornerRadius: 4,
-                            valueFormatter: (item: { value: number }) =>
-                              currencyFormatter.format(item.value),
+                      <Chart
+                        options={{
+                          chart: {
+                            type: 'donut',
+                            fontFamily: 'Nunito, Roboto, sans-serif',
+                            toolbar: { show: false },
                           },
-                        ]}
-                        slotProps={{
-                          legend: { direction: 'vertical', position: { vertical: 'middle', horizontal: 'end' } },
+                          labels: categoryCompositionData.map((item) => item.label),
+                          colors: [
+                            theme.palette.primary.main,
+                            theme.palette.secondary.main,
+                            theme.palette.success.main,
+                            theme.palette.error.main,
+                            theme.palette.warning?.main || '#ffc107',
+                            theme.palette.info?.main || '#00bcd4',
+                          ],
+                          plotOptions: {
+                            pie: {
+                              donut: {
+                                size: '65%',
+                              },
+                            },
+                          },
+                          dataLabels: {
+                            enabled: false,
+                          },
+                          tooltip: {
+                            y: {
+                              formatter: (val: number) => currencyFormatter.format(val),
+                            },
+                          },
+                          legend: {
+                            position: 'right',
+                            fontSize: '14px',
+                            fontFamily: 'Nunito, Roboto, sans-serif',
+                          },
                         }}
+                        series={categoryCompositionData.map((item) => item.value) as any}
+                        type="donut"
+                        height={300}
                       />
                       <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap', gap: 1 }}>
                         {categoryCompositionData.map((category) => (
@@ -860,28 +883,63 @@ export default function Investments() {
                     <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
                       Valor Investido vs Valor Atual
                     </Typography>
-                    <BarChart
-                      height={300}
-                      dataset={profitabilityChartData}
-                      xAxis={[{ scaleType: 'band', dataKey: 'ticker' }]}
+                    <Chart
+                      options={{
+                        chart: {
+                          type: 'bar',
+                          fontFamily: 'Nunito, Roboto, sans-serif',
+                          toolbar: { show: false },
+                        },
+                        plotOptions: {
+                          bar: {
+                            horizontal: false,
+                            columnWidth: '65%',
+                            dataLabels: {
+                              position: 'top',
+                            },
+                          },
+                        },
+                        dataLabels: {
+                          enabled: false,
+                        },
+                        xaxis: {
+                          categories: profitabilityChartData.map((item) => item.ticker),
+                          axisBorder: {
+                            show: false,
+                          },
+                          axisTicks: {
+                            show: false,
+                          },
+                        },
+                        yaxis: {
+                          labels: {
+                            formatter: (val: number) => currencyFormatter.format(val),
+                          },
+                        },
+                        tooltip: {
+                          y: {
+                            formatter: (val: number) => currencyFormatter.format(val),
+                          },
+                        },
+                        colors: [theme.palette.primary.main, theme.palette.success.main],
+                        legend: {
+                          position: 'top',
+                          fontSize: '14px',
+                          fontFamily: 'Nunito, Roboto, sans-serif',
+                        },
+                      }}
                       series={[
                         {
-                          dataKey: 'invested',
-                          label: 'Investido',
-                          color: theme.palette.primary.main,
-                          valueFormatter: (value: number | null) =>
-                            currencyFormatter.format(value ?? 0),
+                          name: 'Investido',
+                          data: profitabilityChartData.map((item) => item.invested),
                         },
                         {
-                          dataKey: 'current',
-                          label: 'Valor Atual',
-                          color: theme.palette.success.main,
-                          valueFormatter: (value: number | null) =>
-                            currencyFormatter.format(value ?? 0),
+                          name: 'Valor Atual',
+                          data: profitabilityChartData.map((item) => item.current),
                         },
-                      ]}
-                      slotProps={{ legend: { position: { vertical: 'top', horizontal: 'end' } } }}
-                      margin={{ top: 40 }}
+                      ] as any}
+                      type="bar"
+                      height={300}
                     />
                   </CardContent>
                 </Card>
@@ -908,21 +966,64 @@ export default function Investments() {
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
                     Mostra a evolução do valor total investido (aportes) ao longo do tempo
                   </Typography>
-                  <LineChart
-                    height={300}
-                    dataset={historyChartData}
-                    xAxis={[{ scaleType: 'band', dataKey: 'date' }]}
+                  <Chart
+                    options={{
+                      chart: {
+                        type: 'area',
+                        fontFamily: 'Nunito, Roboto, sans-serif',
+                        toolbar: { show: false },
+                        sparkline: { enabled: false },
+                      },
+                      stroke: {
+                        curve: 'smooth',
+                        width: 2,
+                      },
+                      dataLabels: {
+                        enabled: false,
+                      },
+                      xaxis: {
+                        categories: historyChartData.map((item) => item.date),
+                        axisBorder: {
+                          show: false,
+                        },
+                        axisTicks: {
+                          show: false,
+                        },
+                      },
+                      yaxis: {
+                        labels: {
+                          formatter: (val: number) => currencyFormatter.format(val),
+                        },
+                      },
+                      tooltip: {
+                        y: {
+                          formatter: (val: number) => currencyFormatter.format(val),
+                        },
+                      },
+                      colors: [theme.palette.primary.main],
+                      fill: {
+                        type: 'gradient',
+                        gradient: {
+                          shadeIntensity: 1,
+                          opacityFrom: 0.45,
+                          opacityTo: 0.05,
+                          stops: [20, 100, 100, 100],
+                        },
+                      },
+                      legend: {
+                        position: 'top',
+                        fontSize: '14px',
+                        fontFamily: 'Nunito, Roboto, sans-serif',
+                      },
+                    }}
                     series={[
                       {
-                        dataKey: 'value',
-                        label: 'Valor Investido',
-                        color: theme.palette.primary.main,
-                        valueFormatter: (value: number | null) =>
-                          currencyFormatter.format(value ?? 0),
+                        name: 'Valor Investido',
+                        data: historyChartData.map((item) => item.value),
                       },
-                    ]}
-                    slotProps={{ legend: { position: { vertical: 'top', horizontal: 'end' } } }}
-                    margin={{ top: 40, bottom: 30 }}
+                    ] as any}
+                    type="area"
+                    height={300}
                   />
                 </CardContent>
               </Card>
