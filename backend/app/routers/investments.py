@@ -90,6 +90,15 @@ def _guess_asset_type(ticker: str) -> str:
     from having to do it for every single row when the guess is obvious.
     """
     t = ticker.strip().upper()
+
+    # Check for fixed income products first (before length/format check,
+    # since these often have longer names than standard ticker codes).
+    if "TESOURO" in t:
+        return "tesouro"
+    if any(keyword in t for keyword in ("CDB", "LCI", "LCA", "CRI", "CRA", "DEBENTURE", "DEBÊNTURE", "POUPANCA", "POUPANÇA")):
+        return "renda_fixa"
+
+    # Standard ticker format check
     if len(t) not in (5, 6) or not t[0].isalpha():
         return "outro"
     # BDRs: ends in "34" (e.g. AAPL34, GOGL34) -- check before the generic
