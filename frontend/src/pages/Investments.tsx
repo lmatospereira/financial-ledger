@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AddIcon from '@mui/icons-material/Add'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
@@ -454,6 +454,65 @@ export default function Investments() {
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
 
+  // Proventos data aggregation
+  const proventosData = useMemo(() => {
+    const proventoMovements = movements.filter((m) => m.movement_type === 'provento')
+
+    const totalProventos = proventoMovements.reduce((sum, m) => sum + (m.total_value || 0), 0)
+
+    // Group by asset
+    const byAsset = proventoMovements.reduce(
+      (acc, m) => {
+        const asset = assets.find((a) => a.id === m.asset_id)
+        const ticker = asset?.ticker || `Asset #${m.asset_id}`
+        acc[ticker] = (acc[ticker] || 0) + (m.total_value || 0)
+        return acc
+      },
+      {} as Record<string, number>,
+    )
+
+    const assetData = Object.entries(byAsset)
+      .map(([ticker, value]) => ({
+        ticker,
+        value,
+      }))
+      .sort((a, b) => b.value - a.value)
+
+    // Group by month
+    const byMonth = proventoMovements.reduce(
+      (acc, m) => {
+        // m.date is "YYYY-MM-DD" -- slice instead of `new Date(m.date)`, which
+        // parses as UTC and can shift into the wrong month in negative-UTC
+        // timezones (e.g. a provento on the 1st landing in the prior month).
+        const yearMonth = m.date.slice(0, 7)
+        acc[yearMonth] = (acc[yearMonth] || 0) + (m.total_value || 0)
+        return acc
+      },
+      {} as Record<string, number>,
+    )
+
+    const monthlyData = Object.entries(byMonth)
+      .map(([yearMonth, value]) => {
+        const [year, month] = yearMonth.split('-')
+        const monthName = new Date(parseInt(year), parseInt(month) - 1).toLocaleString('pt-BR', {
+          month: 'short',
+          year: 'numeric',
+        })
+        return {
+          yearMonth,
+          monthName,
+          value,
+        }
+      })
+      .sort((a, b) => a.yearMonth.localeCompare(b.yearMonth))
+
+    return {
+      totalProventos,
+      assetData,
+      monthlyData,
+    }
+  }, [movements, assets])
+
   return (
     <Layout>
       <Stack spacing={3}>
@@ -607,6 +666,8 @@ export default function Investments() {
                             type: 'donut',
                             fontFamily: 'Nunito, Roboto, sans-serif',
                             toolbar: { show: false },
+                            theme: { mode: theme.palette.mode },
+                            foreColor: theme.palette.text.secondary,
                           },
                           labels: categoryCompositionData.map((item) => item.label),
                           colors: [
@@ -637,7 +698,7 @@ export default function Investments() {
                             fontSize: '14px',
                             fontFamily: 'Nunito, Roboto, sans-serif',
                           },
-                        }}
+                        } as any}
                         series={categoryCompositionData.map((item) => item.value) as any}
                         type="donut"
                         height={300}
@@ -889,6 +950,8 @@ export default function Investments() {
                           type: 'bar',
                           fontFamily: 'Nunito, Roboto, sans-serif',
                           toolbar: { show: false },
+                          theme: { mode: theme.palette.mode },
+                          foreColor: theme.palette.text.secondary,
                         },
                         plotOptions: {
                           bar: {
@@ -927,7 +990,7 @@ export default function Investments() {
                           fontSize: '14px',
                           fontFamily: 'Nunito, Roboto, sans-serif',
                         },
-                      }}
+                      } as any}
                       series={[
                         {
                           name: 'Investido',
@@ -973,6 +1036,8 @@ export default function Investments() {
                         fontFamily: 'Nunito, Roboto, sans-serif',
                         toolbar: { show: false },
                         sparkline: { enabled: false },
+                        theme: { mode: theme.palette.mode },
+                        foreColor: theme.palette.text.secondary,
                       },
                       stroke: {
                         curve: 'smooth',
@@ -1015,7 +1080,7 @@ export default function Investments() {
                         fontSize: '14px',
                         fontFamily: 'Nunito, Roboto, sans-serif',
                       },
-                    }}
+                    } as any}
                     series={[
                       {
                         name: 'Valor Investido',
@@ -1027,6 +1092,145 @@ export default function Investments() {
                   />
                 </CardContent>
               </Card>
+            )}
+
+            {/* Proventos Section */}
+            {proventosData.totalProventos > 0 && (
+              <>
+                <Card>
+                  <CardContent>
+                    <Stack spacing={2}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                        Proventos
+                      </Typography>
+                      <Stack direction="row" spacing={2}>
+                        <Stack sx={{ flex: 1 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Total Recebido
+                          </Typography>
+                          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                            {currencyFormatter.format(proventosData.totalProventos)}
+                          </Typography>
+                        </Stack>
+                      </Stack>
+                    </Stack>
+                  </CardContent>
+                </Card>
+
+                {proventosData.assetData.length > 0 && (
+                  <Card>
+                    <CardContent>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                        Distribuição por Ativo
+                      </Typography>
+                      <TableContainer>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow sx={{ bgcolor: 'action.hover' }}>
+                              <TableCell sx={{ fontWeight: 700 }}>Ticker</TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 700 }}>
+                                Total Recebido
+                              </TableCell>
+                              <TableCell align="right" sx={{ fontWeight: 700 }}>
+                                %
+                              </TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {proventosData.assetData.map((item) => (
+                              <TableRow key={item.ticker}>
+                                <TableCell>
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                    {item.ticker}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Typography variant="body2">
+                                    {currencyFormatter.format(item.value)}
+                                  </Typography>
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Typography variant="body2">
+                                    {proventosData.totalProventos > 0
+                                      ? `${((item.value / proventosData.totalProventos) * 100).toFixed(1)}%`
+                                      : '—'}
+                                  </Typography>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {proventosData.monthlyData.length > 0 && (
+                  <Card>
+                    <CardContent>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                        Distribuição por Mês
+                      </Typography>
+                      <Chart
+                        options={{
+                          chart: {
+                            type: 'bar',
+                            fontFamily: 'Nunito, Roboto, sans-serif',
+                            toolbar: { show: false },
+                            theme: { mode: theme.palette.mode },
+                            foreColor: theme.palette.text.secondary,
+                          },
+                          plotOptions: {
+                            bar: {
+                              horizontal: false,
+                              columnWidth: '65%',
+                              dataLabels: {
+                                position: 'top',
+                              },
+                            },
+                          },
+                          dataLabels: {
+                            enabled: false,
+                          },
+                          xaxis: {
+                            categories: proventosData.monthlyData.map((item) => item.monthName),
+                            axisBorder: {
+                              show: false,
+                            },
+                            axisTicks: {
+                              show: false,
+                            },
+                          },
+                          yaxis: {
+                            labels: {
+                              formatter: (val: number) => currencyFormatter.format(val),
+                            },
+                          },
+                          tooltip: {
+                            y: {
+                              formatter: (val: number) => currencyFormatter.format(val),
+                            },
+                          },
+                          colors: [theme.palette.success.main],
+                          legend: {
+                            position: 'top',
+                            fontSize: '14px',
+                            fontFamily: 'Nunito, Roboto, sans-serif',
+                          },
+                        } as any}
+                        series={[
+                          {
+                            name: 'Proventos',
+                            data: proventosData.monthlyData.map((item) => item.value),
+                          },
+                        ] as any}
+                        type="bar"
+                        height={300}
+                      />
+                    </CardContent>
+                  </Card>
+                )}
+              </>
             )}
 
             {/* Movements Link Card */}
