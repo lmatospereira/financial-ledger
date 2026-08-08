@@ -12,6 +12,20 @@ permissions:
   contents: write
   pull-requests: write
 
+# Two pushes to develop seconds apart (e.g. two PRs merged back-to-back) each
+# fire their own run of this workflow. actions/checkout below pins to the SHA
+# that triggered a given run, so without this guard the OLDER run can win the
+# "create the release branch" race and ship a release missing the newer
+# push's commit entirely (happened in practice twice: v0.1.22 and v0.1.24
+# each shipped without a merge that landed a few seconds before the cut).
+# cancel-in-progress ensures a newer push preempts an older still-running
+# instance instead of both racing to create a branch; combined with checking
+# out `develop` by branch (not by pinned SHA) below, whichever run actually
+# gets to "Bump VERSION" always sees the full, current tip of develop.
+concurrency:
+  group: release-cut-develop
+  cancel-in-progress: true
+
 jobs:
   create-release:
     runs-on: ubuntu-latest
@@ -20,8 +34,13 @@ jobs:
       # PRs made with the built-in token don't trigger new workflow runs
       # (GitHub's anti-recursion protection), which would silently stop CI
       # from ever running on the release branch this job creates.
+      #
+      # `ref: develop` (not the default pinned trigger SHA) so this always
+      # checks out the current tip of develop at execution time -- see the
+      # concurrency comment above for why that matters.
       - uses: actions/checkout@v4
         with:
+          ref: develop
           fetch-depth: 0
           token: ${{ secrets.GH_AUTOMATION_TOKEN }}
 
