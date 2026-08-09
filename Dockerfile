@@ -19,6 +19,14 @@ RUN npm run build
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim AS runtime
 
+# Without this, stdout/stderr are block-buffered (not line-buffered) when not
+# attached to a TTY -- which is always the case under `docker logs` -- so
+# uvicorn's access logs and, critically, unhandled-exception tracebacks can
+# sit invisible in Python's internal buffer for a long time (only flushed on
+# buffer-fill or process exit), making `docker logs` look empty even while
+# real 500s are happening.
+ENV PYTHONUNBUFFERED=1
+
 WORKDIR /app
 
 # Install backend dependencies first for better layer caching.
