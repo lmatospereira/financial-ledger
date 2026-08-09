@@ -4,6 +4,7 @@ Mounts the API routers under /api. A commented-out block near the bottom
 shows where to later mount the built frontend (frontend/dist) as static
 files for a single-container deployment.
 """
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,6 +19,8 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app import auth, crud
 from app.database import SessionLocal
+
+logger = logging.getLogger("app.errors")
 from app.db_migrations import run_migrations
 from app.limiter import limiter
 from app.routers import accounts as accounts_router
@@ -95,6 +98,22 @@ async def rate_limit_exception_handler(request: Request, exc: RateLimitExceeded)
     return JSONResponse(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
         content={"detail": "Rate limit exceeded. Please try again later."},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Explicitly log the full traceback for any unhandled exception.
+
+    Added because a real production 500 on the investments screen produced
+    no visible traceback in `docker logs` despite PYTHONUNBUFFERED=1 -- this
+    guarantees the next occurrence is captured regardless of whatever was
+    suppressing Starlette/uvicorn's default error logging.
+    """
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "Internal server error"},
     )
 
 
