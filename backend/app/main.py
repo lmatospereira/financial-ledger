@@ -19,8 +19,6 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app import auth, crud
 from app.database import SessionLocal
-
-logger = logging.getLogger("app.errors")
 from app.db_migrations import run_migrations
 from app.limiter import limiter
 from app.routers import accounts as accounts_router
@@ -36,6 +34,8 @@ from app.routers import reports as reports_router
 from app.routers import transactions as transactions_router
 from app.routers import transfers as transfers_router
 from app.routers import users as users_router
+
+logger = logging.getLogger("app.errors")
 
 
 @asynccontextmanager
