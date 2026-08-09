@@ -417,6 +417,7 @@ export default function Investments() {
     ticker: pos.ticker,
     invested: pos.total_invested,
     current: pos.current_value || 0,
+    profitLossPct: pos.profit_loss_pct || 0,
   }))
 
   // Calculate composition data by category
@@ -999,6 +1000,82 @@ export default function Investments() {
                         {
                           name: 'Valor Atual',
                           data: profitabilityChartData.map((item) => item.current),
+                        },
+                      ] as any}
+                      type="bar"
+                      height={300}
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                      Rentabilidade por Ativo
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                      Baseada no preço atual mantido manualmente — não reflete cotação em tempo real.
+                    </Typography>
+                    <Chart
+                      options={{
+                        chart: {
+                          type: 'bar',
+                          fontFamily: 'Nunito, Roboto, sans-serif',
+                          toolbar: { show: false },
+                          theme: { mode: theme.palette.mode },
+                          foreColor: theme.palette.text.secondary,
+                        },
+                        plotOptions: {
+                          bar: {
+                            horizontal: false,
+                            columnWidth: '50%',
+                            dataLabels: {
+                              position: 'top',
+                            },
+                            colors: {
+                              ranges: [
+                                { from: -1000, to: 0, color: theme.palette.error.main },
+                                { from: 0, to: 1000, color: theme.palette.success.main },
+                              ],
+                            },
+                          },
+                        },
+                        dataLabels: {
+                          enabled: true,
+                          formatter: (val: number) => `${val.toFixed(1)}%`,
+                          offsetY: -18,
+                          style: {
+                            fontSize: '11px',
+                            colors: [theme.palette.text.primary],
+                          },
+                        },
+                        xaxis: {
+                          categories: profitabilityChartData.map((item) => item.ticker),
+                          axisBorder: {
+                            show: false,
+                          },
+                          axisTicks: {
+                            show: false,
+                          },
+                        },
+                        yaxis: {
+                          labels: {
+                            formatter: (val: number) => `${val.toFixed(0)}%`,
+                          },
+                        },
+                        tooltip: {
+                          y: {
+                            formatter: (val: number) => `${val.toFixed(2)}%`,
+                          },
+                        },
+                        legend: {
+                          show: false,
+                        },
+                      } as any}
+                      series={[
+                        {
+                          name: 'Rentabilidade',
+                          data: profitabilityChartData.map((item) => item.profitLossPct),
                         },
                       ] as any}
                       type="bar"
