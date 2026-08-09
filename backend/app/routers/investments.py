@@ -9,6 +9,7 @@ Investments module supports B3 (Brazilian stock exchange) portfolio tracking:
 """
 import csv
 import io
+import logging
 from datetime import date
 from difflib import SequenceMatcher
 from typing import Optional
@@ -19,6 +20,8 @@ from sqlalchemy.orm import Session
 from app import crud, models, schemas
 from app.auth import get_current_user
 from app.database import get_db
+
+logger = logging.getLogger("app.investments")
 
 router = APIRouter(
     prefix="/api/investments",
@@ -608,7 +611,7 @@ def import_b3_file(
             movements_created += 1
 
         except Exception:
-            # Skip malformed rows silently (log in production if needed)
+            logger.exception("Skipping malformed B3 import row: %r", row)
             continue
 
     return schemas.ImportCommitResponse(
