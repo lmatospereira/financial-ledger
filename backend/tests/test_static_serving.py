@@ -1,4 +1,20 @@
 """Tests for the SPA catch-all static file route in main.py."""
+from pathlib import Path
+
+import pytest
+
+_FRONTEND_DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+
+# The catch-all route is only mounted when frontend/dist exists (see
+# main.py) -- CI's backend-tests job never builds the frontend (that's
+# frontend-build's job, run separately), so this route isn't registered
+# there and any path just 404s instead of exercising the fix. Only
+# meaningful to run where the frontend is actually built, same condition
+# the app itself uses.
+pytestmark = pytest.mark.skipif(
+    not _FRONTEND_DIST.is_dir(),
+    reason="frontend/dist not built -- the SPA catch-all route isn't mounted",
+)
 
 
 def test_path_traversal_falls_back_to_index_html(client):
