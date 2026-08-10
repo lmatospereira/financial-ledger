@@ -1,7 +1,9 @@
 """Tests for recurring transactions: CRUD operations, generation logic, and idempotency."""
+from datetime import date, timedelta
+
 import pytest
 
-from app import auth, crud
+from app import auth, crud, models
 
 
 @pytest.fixture()
@@ -416,3 +418,33 @@ def test_recurring_transactions_cross_user_isolation(client, auth_headers, user_
         f"/api/recurring-transactions/{user_a_recurring['rt']['id']}", headers=auth_headers
     )
     assert response.status_code == 404
+
+
+def test_list_recurring_transactions_with_start_date_older_than_3_years_does_not_500(
+    client, auth_headers, db_session, default_account
+):
+    """Regression test: GET /recurring-transactions must not re-validate the
+    date-range guardrail on read -- see the identical bug/fix for
+    InvestmentMovementOut. RecurringTransactionOut used to inherit the
+    guardrail from RecurringTransactionBase, so a recurring transaction
+    running for more than 3 years (the whole point of "recurring") would
+    500 the whole list once its start_date aged past the rolling window.
+    """
+    user = crud.get_user_by_username(db_session, "admin")
+
+    old_recurring = models.RecurringTransaction(
+        user_id=user.id,
+        account_id=default_account["id"],
+        description="Long-running subscription",
+        amount=29.9,
+        type="expense",
+        day_of_month=5,
+        start_date=date.today() - timedelta(days=365 * 4),
+    )
+    db_session.add(old_recurring)
+    db_session.commit()
+
+    response = client.get("/api/recurring-transactions", headers=auth_headers)
+    assert response.status_code == 200
+    start_dates = [rt["start_date"] for rt in response.json()]
+    assert old_recurring.start_date.isoformat() in start_dates
