@@ -1,9 +1,9 @@
 """Tests for bills: CRUD operations, payment flow, and isolation."""
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
-from app import auth, crud
+from app import auth, crud, models
 
 
 @pytest.fixture()
@@ -362,3 +362,28 @@ def test_bills_cross_user_isolation(client, auth_headers, user_a_bill, expense_c
         headers=auth_headers,
     )
     assert response.status_code == 404
+
+
+def test_list_bills_with_due_date_older_than_3_years_does_not_500(client, auth_headers, db_session):
+    """Regression test: GET /bills must not re-validate the date-range
+    guardrail on read -- see the identical bug/fix for InvestmentMovementOut.
+    BillOut used to inherit the guardrail from BillBase, so an old paid bill
+    (perfectly valid when created) would 500 the whole list once its
+    due_date aged past the rolling 3-year window.
+    """
+    user = crud.get_user_by_username(db_session, "admin")
+
+    old_bill = models.Bill(
+        user_id=user.id,
+        description="Old paid bill",
+        amount=42.0,
+        due_date=date.today() - timedelta(days=365 * 4),
+        paid=True,
+    )
+    db_session.add(old_bill)
+    db_session.commit()
+
+    response = client.get("/api/bills", headers=auth_headers)
+    assert response.status_code == 200
+    due_dates = [b["due_date"] for b in response.json()]
+    assert old_bill.due_date.isoformat() in due_dates

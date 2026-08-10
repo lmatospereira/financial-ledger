@@ -1,8 +1,10 @@
 """Tests for investments: asset/movement CRUD, portfolio aggregation, and B3 file import."""
 import json
+from datetime import date, timedelta
+
 import pytest
 
-from app import auth, crud
+from app import auth, crud, models
 
 
 # ========== Asset CRUD Tests ==========
@@ -1098,3 +1100,36 @@ def test_import_guesses_fixed_income_asset_types(client, auth_headers):
     # CDB and LCI products should be guessed as "renda_fixa"
     assert assets_by_ticker["CDB"]["asset_type"] == "renda_fixa"
     assert assets_by_ticker["LCI"]["asset_type"] == "renda_fixa"
+
+
+def test_list_movements_with_date_older_than_3_years_does_not_500(client, auth_headers, db_session):
+    """Regression test: GET /movements must not re-validate the date-range
+    guardrail on read.
+
+    That guardrail is meant to catch obviously-wrong INPUT (e.g. a typo'd
+    year), but InvestmentMovementOut used to inherit it from
+    InvestmentMovementBase -- so a movement that was perfectly valid when
+    created would start 500ing on every list call once its date aged past
+    the rolling 3-year window. Insert the movement directly via the ORM
+    (bypassing InvestmentMovementCreate's validation) to simulate exactly
+    that aged-out real-world data.
+    """
+    asset = make_asset(client, auth_headers, ticker="OLD3").json()
+    user = crud.get_user_by_username(db_session, "admin")
+
+    old_movement = models.InvestmentMovement(
+        user_id=user.id,
+        asset_id=asset["id"],
+        date=date.today() - timedelta(days=365 * 4),
+        movement_type="compra",
+        quantity=10.0,
+        unit_price=5.0,
+        total_value=50.0,
+    )
+    db_session.add(old_movement)
+    db_session.commit()
+
+    response = client.get("/api/investments/movements", headers=auth_headers)
+    assert response.status_code == 200
+    dates = [m["date"] for m in response.json()]
+    assert old_movement.date.isoformat() in dates

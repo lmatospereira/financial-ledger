@@ -176,7 +176,14 @@ if _frontend_dist.is_dir():
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_frontend(full_path: str):
-        candidate = _frontend_dist / full_path
-        if full_path and candidate.is_file():
+        # SECURITY: resolve the joined path and verify it's still inside
+        # _frontend_dist before serving it. Without this, a request like
+        # /../../../../../../proc/self/environ joins straight through
+        # (Path.__truediv__ doesn't sanitize ".." segments) and lets an
+        # unauthenticated caller read arbitrary files off the container's
+        # filesystem via FileResponse. Caught this being actively probed by
+        # a scanner in production.
+        candidate = (_frontend_dist / full_path).resolve()
+        if full_path and candidate.is_relative_to(_frontend_dist) and candidate.is_file():
             return FileResponse(candidate)
         return FileResponse(_frontend_dist / "index.html")
