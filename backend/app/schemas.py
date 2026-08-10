@@ -274,22 +274,30 @@ class RecurringTransactionBase(BaseModel):
     start_date: date
     end_date: Optional[date] = None
 
-    _validate_start_date = field_validator("start_date")(_validate_date_range)
 
-    @field_validator("end_date")
-    @classmethod
-    def _validate_end_date(cls, v: Optional[date]) -> Optional[date]:
-        if v is None:
-            return v
-        return _validate_date_range(v)
+# The date-range guardrail belongs on input schemas only -- Base is also the
+# parent of Out (see below), and re-validating dates on read would reject
+# perfectly valid old rows once they fall outside the rolling N-years-ago
+# window as time passes (this happened in production: recurring transactions
+# and bills older than 3 years started 500ing on every list/get call once
+# "today" moved far enough past their date). Create/Update each declare the
+# validator themselves instead of inheriting it via Base.
+def _validate_recurring_end_date(cls, v: Optional[date]) -> Optional[date]:
+    if v is None:
+        return v
+    return _validate_date_range(v)
 
 
 class RecurringTransactionCreate(RecurringTransactionBase):
-    pass
+    _validate_start_date = field_validator("start_date")(_validate_date_range)
+    _validate_end_date = field_validator("end_date")(_validate_recurring_end_date)
 
 
 class RecurringTransactionUpdate(RecurringTransactionBase):
     active: Optional[bool] = None
+
+    _validate_start_date = field_validator("start_date")(_validate_date_range)
+    _validate_end_date = field_validator("end_date")(_validate_recurring_end_date)
 
 
 class RecurringTransactionOut(RecurringTransactionBase):
@@ -308,15 +316,15 @@ class BillBase(BaseModel):
     amount: float = Field(gt=0, le=MAX_AMOUNT)
     due_date: date
 
+
+# See the comment above RecurringTransactionCreate: the date-range guardrail
+# is input-only and must not be inherited by BillOut via Base.
+class BillCreate(BillBase):
     _validate_due_date = field_validator("due_date")(_validate_date_range)
 
 
-class BillCreate(BillBase):
-    pass
-
-
 class BillUpdate(BillBase):
-    pass
+    _validate_due_date = field_validator("due_date")(_validate_date_range)
 
 
 class BillOut(BillBase):
@@ -454,11 +462,14 @@ class InvestmentMovementBase(BaseModel):
     # total_value can be 0 for non-purchase movements (bonuses, splits, dividends)
     total_value: float = Field(ge=0, le=MAX_AMOUNT)
 
-    _validate_date = field_validator("date")(_validate_date_range)
 
-
+# The date-range guardrail is input-only -- see the comment above
+# RecurringTransactionCreate. It must not be inherited by InvestmentMovementOut
+# via Base: this exact bug caused a real production 500 on GET
+# /api/investments/movements once a legitimately-created movement's date aged
+# past the rolling 3-year window.
 class InvestmentMovementCreate(InvestmentMovementBase):
-    pass
+    _validate_date = field_validator("date")(_validate_date_range)
 
 
 class InvestmentMovementUpdate(BaseModel):
