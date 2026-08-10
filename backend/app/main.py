@@ -4,9 +4,10 @@ Mounts the API routers under /api. A commented-out block near the bottom
 shows where to later mount the built frontend (frontend/dist) as static
 files for a single-container deployment.
 """
-import logging
 import os
+import traceback
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, Request, status
@@ -34,8 +35,6 @@ from app.routers import reports as reports_router
 from app.routers import transactions as transactions_router
 from app.routers import transfers as transfers_router
 from app.routers import users as users_router
-
-logger = logging.getLogger("app.errors")
 
 
 @asynccontextmanager
@@ -103,14 +102,26 @@ async def rate_limit_exception_handler(request: Request, exc: RateLimitExceeded)
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Explicitly log the full traceback for any unhandled exception.
+    """Capture the full traceback for any unhandled exception.
 
-    Added because a real production 500 on the investments screen produced
-    no visible traceback in `docker logs` despite PYTHONUNBUFFERED=1 -- this
-    guarantees the next occurrence is captured regardless of whatever was
-    suppressing Starlette/uvicorn's default error logging.
+    A real production 500 on the investments screen produced no visible
+    traceback in `docker logs` even after switching to explicit
+    `logger.exception()` calls with PYTHONUNBUFFERED=1 set -- something about
+    this deployment's logging setup (uvicorn's own dictConfig likely disables
+    loggers created after it runs) swallows it before it ever reaches
+    stdout/stderr. Bypass the logging module entirely: write straight to a
+    file with an immediate flush+fsync, which can't be silently dropped by a
+    logging handler/propagation issue. TODO: remove this once the underlying
+    logging suppression is understood and fixed properly.
     """
-    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    try:
+        with open("/app/backend/data/error.log", "a") as f:
+            f.write(f"\n=== {datetime.now(timezone.utc).isoformat()} {request.method} {request.url.path} ===\n")
+            f.write(traceback.format_exc())
+            f.flush()
+            os.fsync(f.fileno())
+    except Exception:
+        pass
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "Internal server error"},
